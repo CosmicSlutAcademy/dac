@@ -63,7 +63,7 @@ def execute_task(task_name, cfg=None, project_dir=None):
         return task
     # Parse plan
     try:
-        from dac.core.autonomous import parse_json
+        from dac.core.llm import parse_json
         plan = parse_json(text)
     except Exception:
         plan = {"steps": [], "files": [], "commands": [], "summary": text}

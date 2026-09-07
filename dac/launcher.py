@@ -48,7 +48,8 @@ def cmd_daemon(args):
         if running:
             print(f"DAC daemon started (PID={pid})")
         else:
-            log_f = Path("/root/.dac/dac.log")
+            from dac.config import LOG_FILE
+            log_f = LOG_FILE
             if log_f.exists():
                 print(log_f.read_text()[-500:])
             print("Failed to start daemon.")
@@ -75,7 +76,7 @@ def cmd_trigger(args):
 
 def cmd_tasks(args):
     from dac.orchestrator import list_tasks, execute_task
-    if args.run:
+    if args.run and not getattr(args, "list", False):
         task = execute_task(args.run)
         if task and task.get("results"):
             r = task["results"]
@@ -133,10 +134,12 @@ def cmd_quick(args):
     return 0
 
 def main(argv=None):
+    from dac import __version__
     parser = argparse.ArgumentParser(
         prog="dac",
         description="DAC — Decentralized Autonomous Coder",
     )
+    parser.add_argument("-V", "--version", action="version", version=f"dac {__version__}")
     sub = parser.add_subparsers(dest="command")
     p_init = sub.add_parser("init", help="Initialize DAC")
     p_init.add_argument("--api-key", help="OpenAI API key")
@@ -147,6 +150,7 @@ def main(argv=None):
     p_daemon = sub.add_parser("daemon", help="Control the DAC daemon")
     p_daemon.add_argument("action", choices=["start", "stop", "status"])
     p_tasks = sub.add_parser("tasks", help="List and manage tasks")
+    p_tasks.add_argument("--list", action="store_true", help="List tasks")
     p_tasks.add_argument("--run", help="Execute a specific task")
     p_send = sub.add_parser("send", help="Quick: send prompt + notify")
     p_send.add_argument("prompt")
@@ -168,6 +172,7 @@ def main(argv=None):
     p_run = sub.add_parser("run", help="Execute code directly")
     p_run.add_argument("code")
     p_run.add_argument("--language", "-l", default="python")
+    p_doctor = sub.add_parser("doctor", help="System health check")
     p_sess = sub.add_parser("sessions", help="List past sessions")
 
     args = parser.parse_args(argv)
@@ -205,6 +210,9 @@ def main(argv=None):
     elif args.command == "run":
         from dac.cli import cmd_run
         return cmd_run(args)
+    elif args.command == "doctor":
+        from dac.cli import cmd_doctor
+        return cmd_doctor()
     elif args.command == "sessions":
         from dac.cli import cmd_session
         return cmd_session(args)

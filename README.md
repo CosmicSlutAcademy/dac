@@ -40,11 +40,15 @@ dac project --list
 | `dac chat "prompt"` | One-shot chat (no execution) |
 | `dac trigger "prompt"` | Queue a task for the daemon |
 | `dac daemon start/stop/status` | Background task runner |
-| `dac tasks --list` | View all tasks |
+| `dac tasks --list` | List tasks |
+| `dac tasks --run NAME` | Execute a registered task |
 | `dac run "code" --language python` | Direct code execution |
 | `dac device` | Phone info (model, battery, WiFi) |
 | `dac project --list/--new/--info` | Project management |
+| `dac sessions` | List past sessions |
 | `dac config --show/--set key=val` | Configuration |
+| `dac doctor` | System health check |
+| `dac --version` | Show version |
 
 ---
 
@@ -54,6 +58,7 @@ dac project --list
 /dac/
   __init__.py          — Package root
   __main__.py          — python -m dac entry
+  tests/                    — stdlib unittest suite (no network)
   launcher.py          — Master CLI orchestrator
   cli.py               — Command implementations
   repl.py              — Interactive REPL

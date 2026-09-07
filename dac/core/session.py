@@ -77,7 +77,8 @@ def list_sessions():
     sessions = []
     for d in SESSIONS_DIR.iterdir():
         if d.is_dir() and (d / "history.json").exists():
-            hist = json.load(open(d / "history.json"))
+            with open(d / "history.json") as fh:
+                hist = json.load(fh)
             sessions.append({
                 "id": d.name,
                 "turns": len(hist),

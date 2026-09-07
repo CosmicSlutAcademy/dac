@@ -1,5 +1,6 @@
 """DAC CLI command implementations."""
 import os
+import sys
 from pathlib import Path
 
 def cmd_config(args):
@@ -27,7 +28,14 @@ def cmd_project(args):
     cfg = load_config()
     base = os.path.expanduser(cfg.get("projects_dir", "~/.dac/projects"))
     if args.list:
-        for p in sorted(Path(base).iterdir()):
+        if not Path(base).exists():
+            print("No projects.")
+            return 0
+        dirs = [p for p in sorted(Path(base).iterdir()) if p.is_dir()]
+        if not dirs:
+            print("No projects.")
+            return 0
+        for p in dirs:
             if p.is_dir():
                 n_files = sum(1 for _ in p.rglob("*") if _.is_file())
                 size = sum(_.stat().st_size for _ in p.rglob("*") if _.is_file())
@@ -100,4 +108,59 @@ def cmd_chat(args):
     print(text)
     if usage:
         print(f"\n[tokens: {usage.get('total_tokens','?')}]")
+    return 0
+
+def cmd_doctor():
+    import shutil, platform
+    from dac.config import load_config, ensure_dirs, CONFIG_DIR, PROJECTS_DIR, SESSIONS_DIR, TASKS_DIR
+    from dac import __version__
+    checks = []
+    ok = True
+
+    # Python version
+    py_ok = sys.version_info >= (3, 10)
+    checks.append(('python >= 3.10', 'ok' if py_ok else 'FAIL', f'{platform.python_version()}'))
+    ok &= py_ok
+
+    # git
+    git = shutil.which('git')
+    checks.append(('git', 'ok' if git else 'WARN', git or 'not found'))
+
+    # tmux
+    tmux = shutil.which('tmux')
+    checks.append(('tmux', 'ok' if tmux else 'WARN', tmux or 'not found'))
+
+    # API key
+    cfg = load_config()
+    key = cfg.get('api_key', '')
+    key_status = 'ok' if key else 'WARN'
+    checks.append(('api_key', key_status, 'sk-***' + key[-4:] if len(key) > 4 else 'not set'))
+    if not key:
+        ok = False
+
+    # Directories
+    ensure_dirs()
+    for d in [('config', CONFIG_DIR), ('projects', PROJECTS_DIR), ('sessions', SESSIONS_DIR), ('tasks', TASKS_DIR)]:
+        checks.append((d[0] + '_dir', 'ok', str(d[1])))
+
+    # termux
+    for cmd in ['termux-info', 'termux-device-info']:
+        t = shutil.which(cmd)
+        if t:
+            checks.append(('termux', 'ok', t))
+            break
+    else:
+        checks.append(('termux', 'WARN', 'not detected'))
+
+    print(f'DAC v{__version__} — Health Check')
+    print()
+    max_label = max(len(c[0]) for c in checks)
+    for label, status, detail in checks:
+        icon = '[92mok[0m' if status == 'ok' else ('[93mWARN[0m' if status == 'WARN' else '[91mFAIL[0m')
+        print(f'  {icon}  {label:{max_label}}  {detail}')
+    print()
+    if ok and all(c[1] != 'FAIL' for c in checks):
+        print('All checks passed.')
+    else:
+        print('Some checks failed or have warnings.')
     return 0

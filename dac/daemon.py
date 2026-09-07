@@ -9,6 +9,7 @@ from dac.config import load_config, CONFIG_DIR, LOG_FILE, PID_FILE, TASKS_DIR
 
 FLAG_FILE = Path("/tmp/dac_trigger.flag")
 
+
 def log(msg):
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {msg}"
@@ -16,11 +17,13 @@ def log(msg):
     with open(LOG_FILE, "a") as f:
         f.write(line + "\n")
 
+
 def signal_handler(sig, frame):
     log("Shutting down DAC daemon.")
     if PID_FILE.exists():
         PID_FILE.unlink()
     sys.exit(0)
+
 
 def trigger(prompt, task_name=None):
     task_name = task_name or f"dac_{int(time.time())}"
@@ -38,6 +41,7 @@ def trigger(prompt, task_name=None):
         f.write(task_name)
     log(f"Triggered task: {task_name}")
     return task_name
+
 
 def run_daemon(interval=5):
     """Main daemon loop."""
@@ -74,6 +78,7 @@ def run_daemon(interval=5):
                 except Exception as e:
                     log(f"Error processing {task_name}: {e}")
         time.sleep(interval)
+
 
 def daemon_status():
     if PID_FILE.exists():
