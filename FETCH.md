@@ -20,7 +20,7 @@ Works on:
 
 1. Detects package manager (pkg/apt)
 2. Installs python, git, tmux
-3. Writes all 16 DAC source files (embedded)
+3. Writes all 16 DAC source files (embedded, v1.2.0)
 4. Installs DAC globally via pip
 5. Sets API key + model
 6. Runs smoke test → `DAC installed OK`
