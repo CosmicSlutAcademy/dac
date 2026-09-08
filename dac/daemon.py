@@ -4,6 +4,7 @@ import sys
 import time
 import signal
 import json
+import threading
 from pathlib import Path
 from dac.config import load_config, CONFIG_DIR, LOG_FILE, PID_FILE, TASKS_DIR
 
@@ -51,6 +52,31 @@ def run_daemon(interval=5):
     log(f"DAC daemon started (PID={os.getpid()})")
     cfg = load_config()
     processed = set()
+
+    # Optional background services
+    if cfg.get("telegram_token"):
+        def _tg():
+            while True:
+                try:
+                    from dac.telegram_bot import run_bot
+                    run_bot(cfg=cfg)
+                except Exception as e:
+                    log(f"[telegram] {e}")
+                    time.sleep(10)
+
+        threading.Thread(target=_tg, daemon=True, name="dac-telegram").start()
+        log("Telegram bot service started.")
+
+    def _monitors_loop():
+        while True:
+            try:
+                from dac.monitor import run_all
+                run_all(cfg=cfg)
+            except Exception as e:
+                log(f"[monitor] {e}")
+            time.sleep(60)
+
+    threading.Thread(target=_monitors_loop, daemon=True, name="dac-monitors").start()
 
     # Process any pending tasks on startup
     for f in TASKS_DIR.glob("*.json"):

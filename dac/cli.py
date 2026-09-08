@@ -7,7 +7,17 @@ def cmd_config(args):
     from dac.config import load_config, save_config
     cfg = load_config()
     if args.show:
-        safe = {k: (v if k != "api_key" or not v else ("sk-***" + v[-4:])) for k, v in cfg.items()}
+        def _mask(k, v):
+            if not v:
+                return v
+            if k == "api_key":
+                return "sk-***" + str(v)[-4:]
+            if k == "telegram_token":
+                return "tg-***" + str(v)[-4:]
+            if k.endswith("_key") or k.endswith("_token"):
+                return "***" + str(v)[-4:]
+            return v
+        safe = {k: _mask(k, v) for k, v in cfg.items()}
         for k, v in safe.items():
             print(f"{k}: {v}")
         return 0

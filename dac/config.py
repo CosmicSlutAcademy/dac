@@ -15,6 +15,7 @@ DEFAULTS = {
     "provider": "openai",
     "model": "gpt-4o",
     "api_key": "",
+    "telegram_token": "",
     "max_tokens": 4096,
     "temperature": 0.2,
     "projects_dir": str(PROJECTS_DIR),

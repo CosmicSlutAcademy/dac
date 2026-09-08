@@ -174,6 +174,23 @@ def main(argv=None):
     p_run.add_argument("--language", "-l", default="python")
     p_doctor = sub.add_parser("doctor", help="System health check")
     p_sess = sub.add_parser("sessions", help="List past sessions")
+    p_assistant = sub.add_parser("assistant", help="Personal assistant (TTS + notifications)")
+    p_assistant.add_argument("--say", help="Speak one message and exit")
+    p_assistant.add_argument("--remind", help="Schedule a reminder")
+    p_assistant.add_argument("--in", dest="in_", help="Delay for --remind (30m, 2h, 90s)")
+    p_monitor = sub.add_parser("monitor", help="Price/API monitor with alerts")
+    p_monitor.add_argument("name", nargs="?")
+    p_monitor.add_argument("--add", metavar="NAME")
+    p_monitor.add_argument("--url", help="JSON endpoint for --add")
+    p_monitor.add_argument("--path", help="Dot path to value, e.g. bitcoin.usd")
+    p_monitor.add_argument("--threshold", type=float, default=5.0)
+    p_monitor.add_argument("--interval", type=int, default=300)
+    p_monitor.add_argument("--list", action="store_true")
+    p_monitor.add_argument("--remove", metavar="NAME")
+    p_telegram = sub.add_parser("telegram", help="Telegram bot backend (long polling)")
+    p_telegram.add_argument("--oneshot", action="store_true", help="Process pending updates once")
+    p_demo = sub.add_parser("demo", help="Scripted on-device demo (no LLM needed)")
+    p_demo.add_argument("--project-dir", help="Where to write the demo project")
 
     args = parser.parse_args(argv)
     if not args.command:
@@ -216,6 +233,37 @@ def main(argv=None):
     elif args.command == "sessions":
         from dac.cli import cmd_session
         return cmd_session(args)
+    elif args.command == "assistant":
+        from dac.assistant import main as assistant_main
+        argv = []
+        if args.say:
+            argv = ["--say", args.say]
+        elif args.remind:
+            argv = ["--remind", args.remind, "--in", args.in_ or "30m"]
+        return assistant_main(argv)
+    elif args.command == "monitor":
+        from dac.monitor import main as monitor_main
+        argv = []
+        if args.list:
+            argv = ["--list"]
+        elif args.remove:
+            argv = ["--remove", args.remove]
+        elif args.add:
+            argv = ["--add", args.add]
+            if args.url:
+                argv += ["--url", args.url]
+            if args.path:
+                argv += ["--path", args.path]
+            argv += ["--threshold", str(args.threshold), "--interval", str(args.interval)]
+        elif args.name:
+            argv = [args.name]
+        return monitor_main(argv)
+    elif args.command == "telegram":
+        from dac.telegram_bot import main as telegram_main
+        return telegram_main(["--oneshot"] if args.oneshot else [])
+    elif args.command == "demo":
+        from dac.demo import main as demo_main
+        return demo_main(["--project-dir", args.project_dir] if args.project_dir else [])
     return 0
 
 if __name__ == "__main__":
