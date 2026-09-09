@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 os.environ["DAC_HOME"] = tempfile.mkdtemp(prefix="dac-test-repl-")
 
-from dac.repl import _maybe_run_direct  # noqa: E402
+from dac.repl import _maybe_run_direct, _is_action_request, _action_messages, ACTION_WRAP  # noqa: E402
 
 
 class ReplDirectTest(unittest.TestCase):
@@ -30,6 +30,30 @@ class ReplDirectTest(unittest.TestCase):
             handled = _maybe_run_direct("!false")
             self.assertTrue(handled)
             run.assert_called_once()
+
+
+
+class ActionModeTest(unittest.TestCase):
+    def test_is_action_request_detects_build_words(self):
+        self.assertTrue(_is_action_request("Automate the process"))
+        self.assertTrue(_is_action_request("build a landing page"))
+        self.assertTrue(_is_action_request("create a script that monitors"))
+        self.assertTrue(_is_action_request("set up a telegram bot"))
+
+    def test_is_action_request_false_for_chat(self):
+        self.assertFalse(_is_action_request("explain what is happening"))
+        self.assertFalse(_is_action_request("hello"))
+
+    def test_action_messages_appends_wrapper(self):
+        messages = [{"role": "user", "content": "build me a tool"}]
+        out = _action_messages(messages, "build me a tool")
+        self.assertEqual(len(out), 1)
+        self.assertIn(ACTION_WRAP, out[0]["content"])
+
+    def test_action_messages_untouched_for_explain(self):
+        messages = [{"role": "user", "content": "explain phishing"}]
+        out = _action_messages(messages, "explain phishing")
+        self.assertEqual(out, messages)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,32 @@ from dac.core.executor import execute_block, run_cmd
 
 PROMPT = "\033[96m≈dac\033[0m \033[90m>\033[0m "
 
+ACTION_KEYWORDS = (
+    "build", "create", "automate", "generate", "make ", "make a", "make an",
+    "install ", "set up", "setup", "develop", "scaffold", "write a script",
+    "write script", "write a tool", "new script",
+)
+
+ACTION_WRAP = "\n[ACTION REQUEST: respond ONLY with fenced code blocks (```python or ```bash). End with exactly AUTONOMY_READY. No prose, no numbered lists, no explanation.]\n"
+
+
+def _is_action_request(text):
+    lowered = text.lower()
+    return any(kw in lowered for kw in ACTION_KEYWORDS)
+
+
+def _action_messages(messages, user_input):
+    """Append the action-mode wrapper to the last user message."""
+    if not _is_action_request(user_input):
+        return messages
+    out = list(messages)
+    for i in range(len(out) - 1, -1, -1):
+        if out[i]["role"] == "user":
+            out[i] = dict(out[i], content=out[i]["content"] + ACTION_WRAP)
+            break
+    return out
+
+
 def _maybe_run_direct(user_input):
     """Run `dac ...` / `!...` lines directly as shell commands. Returns True if handled."""
     if not (user_input.startswith("dac ") or user_input.startswith("!")):
@@ -79,9 +105,11 @@ def repl(session=None):
             continue
 
         session.add_user(user_input)
-        messages = session.get_full_messages()
+        messages = _action_messages(session.get_full_messages(), user_input)
 
         try:
+            if _is_action_request(user_input):
+                print("\033[90m[action mode]\033[0m ", end="", flush=True)
             print("\033[90mthinking...\033[0m", end="", flush=True)
             t0 = time.time()
             text, usage = complete(cfg, messages)
