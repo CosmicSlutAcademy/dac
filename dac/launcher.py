@@ -191,6 +191,13 @@ def main(argv=None):
     p_telegram.add_argument("--oneshot", action="store_true", help="Process pending updates once")
     p_demo = sub.add_parser("demo", help="Scripted on-device demo (no LLM needed)")
     p_demo.add_argument("--project-dir", help="Where to write the demo project")
+    p_site = sub.add_parser("site", help="GCI site generator (landing page + 2h protection feed)")
+    p_site.add_argument("--build", action="store_true", help="Generate site once")
+    p_site.add_argument("--update", action="store_true", help="Rotate protection and regenerate")
+    p_site.add_argument("--serve", action="store_true", help="Serve over HTTP")
+    p_site.add_argument("--auto-loop", dest="auto_loop", action="store_true", help="Rotate forever every --interval hours")
+    p_site.add_argument("--port", type=int, default=8080)
+    p_site.add_argument("--interval", type=float, default=2.0, help="Hours between rotations")
 
     args = parser.parse_args(argv)
     if not args.command:
@@ -264,6 +271,18 @@ def main(argv=None):
     elif args.command == "demo":
         from dac.demo import main as demo_main
         return demo_main(["--project-dir", args.project_dir] if args.project_dir else [])
+    elif args.command == "site":
+        from dac.site import main as site_main
+        argv = []
+        if args.serve:
+            argv = ["--serve", "--port", str(args.port)]
+        elif args.update:
+            argv = ["--update"]
+        elif args.auto_loop:
+            argv = ["--auto-loop", "--interval", str(args.interval)]
+        elif args.build:
+            argv = ["--build"]
+        return site_main(argv)
     return 0
 
 if __name__ == "__main__":
