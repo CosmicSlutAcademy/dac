@@ -60,5 +60,27 @@ class ConfigTest(unittest.TestCase):
                 self.assertEqual(cfg[k], v)
 
 
+    def test_corrupt_config_returns_defaults(self):
+        """Corrupt config.json should not crash; falls back to defaults."""
+        CONFIG_FILE.write_text("not-valid-json!!!", encoding="utf-8")
+        import io, contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cfg = load_config()
+        self.assertIn("Warning", buf.getvalue())
+        for k, v in DEFAULTS.items():
+            if k == "projects_dir":
+                self.assertEqual(cfg[k], str(PROJECTS_DIR))
+            else:
+                self.assertEqual(cfg[k], v)
+        # Clean up
+        CONFIG_FILE.unlink()
+
+    def test_empty_config_file_returns_defaults(self):
+        """Empty config.json should not crash."""
+        CONFIG_FILE.write_text("", encoding="utf-8")
+        cfg = load_config()
+        self.assertEqual(cfg["model"], "gpt-4o")
+
 if __name__ == "__main__":
     unittest.main()

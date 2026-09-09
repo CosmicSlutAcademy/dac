@@ -31,9 +31,13 @@ def ensure_dirs():
 def load_config():
     ensure_dirs()
     if CONFIG_FILE.exists():
-        with open(CONFIG_FILE) as f:
-            saved = json.load(f)
-        cfg = {**DEFAULTS, **saved}
+        try:
+            with open(CONFIG_FILE) as f:
+                saved = json.load(f)
+            cfg = {**DEFAULTS, **saved}
+        except (json.JSONDecodeError, ValueError):
+            cfg = DEFAULTS.copy()
+            print("Warning: config.json is corrupt, resetting to defaults.")
     else:
         cfg = DEFAULTS.copy()
     if not cfg.get("api_key"):

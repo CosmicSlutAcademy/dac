@@ -19,7 +19,8 @@ PRESETS = {
 def load_monitors():
     if MONITORS_FILE.exists():
         try:
-            return json.load(open(MONITORS_FILE))
+            with open(MONITORS_FILE) as f:
+                return json.load(f)
         except (json.JSONDecodeError, OSError):
             return []
     return []

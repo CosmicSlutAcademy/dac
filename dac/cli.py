@@ -26,6 +26,9 @@ def cmd_config(args):
         if not key:
             print("Format: --set key=value")
             return 1
+        if not val:
+            print("Error: cannot set empty value. Use --set key=value with a non-empty value.")
+            return 1
         cfg[key] = val
         save_config(cfg)
         print(f"Set {key}")

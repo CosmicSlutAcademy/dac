@@ -9,7 +9,7 @@ from pathlib import Path
 
 DAC_ROOT = str(Path(__file__).resolve().parent.parent)
 
-DAEMON_CMD = f'cd {DAC_ROOT} && python3 -c "from dac.daemon import run_daemon; run_daemon()"'
+DAEMON_CMD = f'cd {DAC_ROOT} && "{sys.executable}" -c "from dac.daemon import run_daemon; run_daemon()"'
 
 def cmd_init(args):
     from dac.config import load_config, save_config, CONFIG_DIR, PROJECTS_DIR, SESSIONS_DIR
@@ -267,4 +267,8 @@ def main(argv=None):
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        # Handle pipe closures (e.g., dac config --show | grep)
+        sys.exit(0)

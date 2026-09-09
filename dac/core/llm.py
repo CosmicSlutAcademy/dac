@@ -57,13 +57,24 @@ def complete(cfg, messages):
         return _chat_completion(api_key, model, messages, max_tokens, temperature)
     raise LLMError(f"Unsupported provider: {provider}")
 
-def extract_code_blocks(text):
-    """Parse ```python ... ``` (or ```bash```) blocks from LLM output."""
+def extract_code_blocks_with_lang(text):
+    """Parse ```python ... ``` (or ```bash```) blocks, returning (language, code) pairs."""
     import re
     blocks = []
-    for m in re.finditer(r"```(?:python|py|bash|sh|zsh)?\n(.*?)```", text, re.DOTALL):
-        blocks.append(m.group(1).strip())
+    for m in re.finditer(r"```(python|py|bash|sh|zsh)?\n(.*?)```", text, re.DOTALL):
+        lang = m.group(1) or ""
+        if lang in ("py", "python"):
+            lang = "python"
+        elif lang in ("sh", "bash", "zsh"):
+            lang = "bash"
+        else:
+            lang = "bash"
+        blocks.append((lang, m.group(2).strip()))
     return blocks
+
+def extract_code_blocks(text):
+    """Parse ```python ... ``` (or ```bash```) blocks from LLM output."""
+    return [code for _, code in extract_code_blocks_with_lang(text)]
 
 def parse_json(text):
     """Try to parse JSON from LLM output, stripping markdown fences."""

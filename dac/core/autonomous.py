@@ -5,8 +5,8 @@ import os
 import time
 from pathlib import Path
 
-from dac.core.llm import extract_code_blocks, parse_json
-from dac.core.executor import execute_block, write_file, run_cmd
+from dac.core.llm import extract_code_blocks, extract_code_blocks_with_lang, parse_json
+from dac.core.executor import execute_block, write_file, run_cmd, run_script_python, run_script_bash
 from dac.config import load_config
 
 AUTONOMY_MARKER = "AUTONOMY_READY"
@@ -72,29 +72,32 @@ def plan_and_execute(prompt, project_dir, cfg, session, auto_confirm=False):
     return results
 
 def _open_generation(prompt, project_dir, cfg, session):
-    """Fallback: send the prompt to the LLM, show output, and look for code blocks."""
+    """Fallback: send the prompt to the LLM, show output, and execute any code blocks found."""
     from dac.core.llm import complete
 
     messages = session.get_full_messages() + [{"role": "user", "content": prompt}]
     text, _ = complete(cfg, messages)
 
     results = {"files_written": [], "commands_run": [], "errors": [], "text": text}
-    blocks = extract_code_blocks(text)
+    blocks = extract_code_blocks_with_lang(text)
 
     if blocks:
-        # Heuristic: python blocks with file-writing intent
-        for i, block in enumerate(blocks):
-            # If it's a python script, save it
-            p = os.path.join(project_dir, f"generated_{int(time.time())}_{i}.py")
+        for i, (lang, block) in enumerate(blocks):
+            ext = "py" if lang == "python" else "sh"
+            p = os.path.join(project_dir, f"generated_{int(time.time())}_{i}.{ext}")
             try:
                 write_file(p, block)
                 results["files_written"].append(p)
+                rc, out, _ = execute_block(block, cwd=project_dir, lang=lang)
+                results["commands_run"].append({"cmd": f"python3 {p}" if lang == "python" else f"bash {p}", "rc": rc, "output": out[:500]})
+                if rc != 0:
+                    results["errors"].append(f"Execution failed ({rc}): {p}")
             except Exception as e:
                 results["errors"].append(str(e))
     return results
 
 def verify_success(results, expected=None):
-    """Check if execution succeeded and deta new errors."""
+    """Check if execution succeeded and detect new errors."""
     if results.get("errors"):
         return False
     if expected and not os.path.exists(expected):

@@ -107,7 +107,7 @@ def _handle_query(cfg, session, q):
         return
     session.add_user(q)
     try:
-        from dac.core.llm import SYSTEM_PROMPT  # noqa: F401  (assistant persona)
+        from dac.core.session import SYSTEM_PROMPT  # noqa: F401  (assistant persona)
         text, usage = complete(cfg, session.get_full_messages())
         session.add_assistant(text)
         spoke = speak(text)
@@ -115,7 +115,7 @@ def _handle_query(cfg, session, q):
         if usage:
             print(f"  [tokens: {usage.get('total_tokens', '?')}]")
         return spoke
-    except LLMError as e:
+    except (LLMError, ImportError) as e:
         print(f"Error: {e}")
         return None
 

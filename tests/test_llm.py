@@ -10,6 +10,7 @@ from dac.core.llm import (  # noqa: E402
     complete,
     LLMError,
     extract_code_blocks,
+    extract_code_blocks_with_lang,
     parse_json,
 )
 
@@ -19,6 +20,23 @@ class ParseTest(unittest.TestCase):
         text = "Here:\n```python\nprint('hi')\n```\nand:\n```bash\nls -la\n```"
         blocks = extract_code_blocks(text)
         self.assertEqual(blocks, ["print('hi')", "ls -la"])
+
+    def test_extract_code_blocks_with_lang(self):
+        text = "```python\nprint('hi')\n```\n```bash\necho ok\n```"
+        blocks = extract_code_blocks_with_lang(text)
+        self.assertEqual(len(blocks), 2)
+        self.assertEqual(blocks[0], ("python", "print('hi')"))
+        self.assertEqual(blocks[1], ("bash", "echo ok"))
+
+    def test_extract_code_blocks_with_lang_plain_fence(self):
+        blocks = extract_code_blocks_with_lang("```\nwhoami\n```")
+        self.assertEqual(blocks, [("bash", "whoami")])
+
+    def test_extract_code_blocks_with_lang_sh_zsh(self):
+        text = "```sh\necho hi\n```\n```zsh\nls\n```"
+        blocks = extract_code_blocks_with_lang(text)
+        self.assertEqual(blocks[0][0], "bash")
+        self.assertEqual(blocks[1][0], "bash")
 
     def test_extract_code_blocks_plain_fence(self):
         self.assertEqual(extract_code_blocks("```\nwhoami\n```"), ["whoami"])

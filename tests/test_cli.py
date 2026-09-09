@@ -69,5 +69,26 @@ class CliTest(unittest.TestCase):
         self.assertRegex(p.stdout.strip(), r"^dac \d+\.\d+\.\d+$")
 
 
+    def test_config_set_empty_value_fails(self):
+        with tempfile.TemporaryDirectory() as home:
+            run_cli("init", "--api-key", "sk-real-key", env_extra={"DAC_HOME": home})
+            p = run_cli("config", "--set", "api_key=", env_extra={"DAC_HOME": home})
+            self.assertEqual(p.returncode, 1)
+            self.assertIn("cannot set empty", p.stdout)
+            # Original key should still be intact
+            p2 = run_cli("config", "--set", "api_key=", env_extra={"DAC_HOME": home})
+            cfg = json.load(open(os.path.join(home, "config.json")))
+            self.assertEqual(cfg["api_key"], "sk-real-key")
+
+    def test_corrupt_config_does_not_crash(self):
+        with tempfile.TemporaryDirectory() as home:
+            config_file = os.path.join(home, "config.json")
+            with open(config_file, "w") as f:
+                f.write("not-json")
+            p = run_cli("config", "--show", env_extra={"DAC_HOME": home})
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertIn("Warning", p.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

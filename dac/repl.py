@@ -3,7 +3,11 @@ import sys
 import time
 from dac.config import load_config
 from dac.core.session import Session
-from dac.core.llm import complete, LLMError
+from dac.core.llm import complete, LLMError, extract_code_blocks_with_lang
+from dac.core.autonomous import should_execute, _open_generation
+from dac.core.executor import execute_block
+from dac.config import load_config
+import os
 
 PROMPT = "\033[96m≈dac\033[0m \033[90m>\033[0m "
 
@@ -68,8 +72,50 @@ def repl(session=None):
             session.add_assistant(text)
             tok = usage.get("total_tokens", "?")
             print(f"\033[90m  [{elapsed:.1f}s | {tok} tokens]\033[0m\n")
+            
+            # Check for AUTONOMY_READY marker and auto-execute
+            if should_execute(text):
+                print("\033[90mAutonomy triggered — executing...\033[0m")
+                project_dir = os.path.expanduser(cfg.get("projects_dir", "~/.dac/projects"))
+                results = _execute_code_blocks(text, project_dir, cfg, session)
+                if results.get("files_written"):
+                    print("\nFiles:")
+                    for f in results["files_written"]:
+                        print(f"  ✓ {f}")
+                if results.get("commands_run"):
+                    print("\nOutput:")
+                    for c in results["commands_run"]:
+                        print(c.get("output", "")[:500])
+                if results.get("errors"):
+                    print("\nErrors:")
+                    for e in results["errors"]:
+                        print(f"  ✗ {e}")
         except LLMError as e:
             print(f"\n  \033[91mError:\033[0m {e}\n")
+
+
+def _execute_code_blocks(text, project_dir, cfg, session):
+    """Extract code blocks from LLM text and execute them."""
+    from dac.core.llm import complete
+    
+    results = {"files_written": [], "commands_run": [], "errors": [], "text": text}
+    blocks = extract_code_blocks_with_lang(text)
+    
+    if blocks:
+        for lang, block in blocks:
+            ext = "py" if lang == "python" else "sh"
+            p = os.path.join(project_dir, f"auto_{int(time.time())}.{ext}")
+            try:
+                from dac.core.executor import write_file
+                write_file(p, block)
+                results["files_written"].append(p)
+                rc, out, _ = execute_block(block, cwd=project_dir, lang=lang)
+                results["commands_run"].append({"cmd": f"python3 {p}" if lang == "python" else f"bash {p}", "rc": rc, "output": out[:500]})
+                if rc != 0:
+                    results["errors"].append(f"Execution failed ({rc}): {p}")
+            except Exception as e:
+                results["errors"].append(str(e))
+    return results
 
 def main():
     repl()

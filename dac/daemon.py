@@ -48,6 +48,7 @@ def run_daemon(interval=5):
     """Main daemon loop."""
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGPIPE, signal_handler)
     PID_FILE.write_text(str(os.getpid()))
     log(f"DAC daemon started (PID={os.getpid()})")
     cfg = load_config()
