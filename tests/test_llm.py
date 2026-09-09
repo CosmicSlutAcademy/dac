@@ -73,6 +73,59 @@ class CompleteTest(unittest.TestCase):
             self.assertEqual(usage["total_tokens"], 7)
             m.assert_called_once()
 
+class RetryTest(unittest.TestCase):
+    def test_retry_after_seconds_from_message(self):
+        from dac.core.llm import _retry_after_seconds
+        class _Err:
+            headers = {}
+            def read(self):
+                return b'{"error": {"message": "Rate limit reached. Please try again in 6.664s."}}'
+        self.assertEqual(_retry_after_seconds(_Err()), 6.664)
+
+    def test_retry_after_seconds_from_header(self):
+        from dac.core.llm import _retry_after_seconds
+        class _Err:
+            headers = {"Retry-After": "3"}
+            def read(self):
+                return b'{"error": {"message": "rate limited"}}'
+        self.assertEqual(_retry_after_seconds(_Err()), 3.0)
+
+    def test_post_json_retries_on_429(self):
+        from dac.core.llm import _post_json
+        import urllib.error
+
+        calls = {"n": 0}
+
+        def fake_urlopen(req, timeout=120):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", {}, None)
+            resp = unittest.mock.MagicMock()
+            resp.read.return_value = b'{"ok": true}'
+            ctx = unittest.mock.MagicMock()
+            ctx.__enter__.return_value = resp
+            return ctx
+
+        with unittest.mock.patch("dac.core.llm.time.sleep") as sleep, \
+             unittest.mock.patch("dac.core.llm.urllib.request.urlopen", side_effect=fake_urlopen):
+            result = _post_json("https://x/v1/chat/completions", {}, {"model": "gpt-4o"})
+            self.assertEqual(result, {"ok": True})
+            self.assertEqual(calls["n"], 2)
+            sleep.assert_called_once()
+
+    def test_post_json_gives_up_after_retries(self):
+        from dac.core.llm import _post_json, LLMError
+        import urllib.error
+
+        def fake_urlopen(req, timeout=120):
+            raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", {}, None)
+
+        with unittest.mock.patch("dac.core.llm.time.sleep"), \
+             unittest.mock.patch("dac.core.llm.urllib.request.urlopen", side_effect=fake_urlopen):
+            with self.assertRaises(LLMError):
+                _post_json("https://x/v1/chat/completions", {}, {"model": "gpt-4o"}, max_retries=2)
+
 
 if __name__ == "__main__":
     unittest.main()
+

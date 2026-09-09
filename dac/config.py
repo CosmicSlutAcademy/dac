@@ -18,6 +18,7 @@ DEFAULTS = {
     "telegram_token": "",
     "max_tokens": 4096,
     "temperature": 0.2,
+    "max_retries": 3,
     "projects_dir": str(PROJECTS_DIR),
     "auto_execute": False,
     "sandbox": True,

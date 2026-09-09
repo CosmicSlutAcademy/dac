@@ -1,5 +1,7 @@
 """LLM integration layer — OpenAI API, stdlib-only (zero dependencies)."""
 import json
+import re
+import time
 import ssl
 import urllib.request
 import urllib.error
@@ -9,23 +11,46 @@ DEFAULT_BASE = "https://api.openai.com/v1"
 class LLMError(Exception):
     pass
 
-def _post_json(url, headers, payload, timeout=120):
+def _retry_after_seconds(e):
+    """Extract suggested retry delay from an HTTP 429 response."""
+    try:
+        ra = e.headers.get("Retry-After")
+        if ra:
+            return float(ra)
+    except Exception:
+        pass
+    try:
+        body = e.read().decode("utf-8")[:2000]
+        m = re.search(r"try again in ([\d.]+)s", body, re.IGNORECASE)
+        if m:
+            return float(m.group(1))
+    except Exception:
+        pass
+    return 5.0
+
+
+def _post_json(url, headers, payload, timeout=120, max_retries=3):
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        detail = ""
+    for attempt in range(max_retries + 1):
         try:
-            detail = e.read().decode("utf-8")[:500]
-        except Exception:
-            pass
-        raise LLMError(f"HTTP {e.code}: {detail}") from e
-    except Exception as e:
-        raise LLMError(f"Network error: {e}") from e
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8")[:500]
+            except Exception:
+                pass
+            if e.code == 429 and attempt < max_retries:
+                delay = _retry_after_seconds(e)
+                time.sleep(delay)
+                continue
+            raise LLMError(f"HTTP {e.code}: {detail}") from e
+        except Exception as e:
+            raise LLMError(f"Network error: {e}") from e
 
-def _chat_completion(api_key, model, messages, max_tokens, temperature, base_url=DEFAULT_BASE):
+def _chat_completion(api_key, model, messages, max_tokens, temperature, base_url=DEFAULT_BASE, max_retries=3):
     url = f"{base_url.rstrip('/')}/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -37,7 +62,7 @@ def _chat_completion(api_key, model, messages, max_tokens, temperature, base_url
         "max_tokens": max_tokens,
         "temperature": temperature,
     }
-    data = _post_json(url, headers, payload)
+    data = _post_json(url, headers, payload, max_retries=max_retries)
     if "choices" not in data or not data["choices"]:
         raise LLMError("No choices returned")
     content = data["choices"][0]["message"]["content"]
@@ -53,8 +78,9 @@ def complete(cfg, messages):
     model = cfg.get("model", "gpt-4o")
     max_tokens = int(cfg.get("max_tokens", 4096))
     temperature = float(cfg.get("temperature", 0.2))
+    max_retries = int(cfg.get("max_retries", 3))
     if provider == "openai":
-        return _chat_completion(api_key, model, messages, max_tokens, temperature)
+        return _chat_completion(api_key, model, messages, max_tokens, temperature, max_retries=max_retries)
     raise LLMError(f"Unsupported provider: {provider}")
 
 def extract_code_blocks_with_lang(text):
