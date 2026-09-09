@@ -1,15 +1,31 @@
 """Interactive REPL — the core interactive loop for DAC."""
 import sys
 import time
+import os
+
 from dac.config import load_config
 from dac.core.session import Session
 from dac.core.llm import complete, LLMError, extract_code_blocks_with_lang
 from dac.core.autonomous import should_execute, _open_generation
-from dac.core.executor import execute_block
-from dac.config import load_config
-import os
+from dac.core.executor import execute_block, run_cmd
 
 PROMPT = "\033[96m≈dac\033[0m \033[90m>\033[0m "
+
+def _maybe_run_direct(user_input):
+    """Run `dac ...` / `!...` lines directly as shell commands. Returns True if handled."""
+    if not (user_input.startswith("dac ") or user_input.startswith("!")):
+        return False
+    cmd = user_input[1:].strip() if user_input.startswith("!") else user_input
+    print(f"\033[90m$ {cmd}\033[0m")
+    rc, out, err = run_cmd(cmd)
+    if out.strip():
+        print(out.rstrip())
+    if err.strip():
+        print(err.rstrip())
+    if rc != 0:
+        print(f"\033[91m(exit {rc})\033[0m")
+    return True
+
 
 def repl(session=None):
     cfg = load_config()
@@ -53,10 +69,13 @@ def repl(session=None):
             print(f"New session: {session.session_id}")
             continue
         if user_input.lower() == "/device":
-            from dac.core.executor import run_cmd
             for c in ["termux-device-info", "termux-battery-status"]:
                 _, out, _ = run_cmd(c)
                 print(out.strip())
+            continue
+
+        # Direct execution: `dac ...` runs DAC CLI, `!...` runs any shell command.
+        if _maybe_run_direct(user_input):
             continue
 
         session.add_user(user_input)
