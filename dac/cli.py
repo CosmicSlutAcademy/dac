@@ -123,12 +123,85 @@ def cmd_chat(args):
         print(f"\n[tokens: {usage.get('total_tokens','?')}]")
     return 0
 
-def cmd_doctor():
+def _bin_dirs():
+    """Candidate bin directories for ELF executables (Termux + Linux)."""
+    dirs = []
+    prefix = os.environ.get("PREFIX")
+    if prefix:
+        dirs.append(os.path.join(prefix, "bin"))
+    dirs += ["/usr/bin", "/bin", "/usr/local/bin"]
+    return [d for d in dirs if os.path.isdir(d)]
+
+def _find_zero_byte_binaries():
+    """Return 0-byte regular files inside bin dirs (corrupted installs)."""
+    found = []
+    for d in _bin_dirs():
+        try:
+            for name in sorted(os.listdir(d)):
+                p = os.path.join(d, name)
+                try:
+                    if os.path.isfile(p) and not os.path.islink(p) and os.path.getsize(p) == 0:
+                        found.append(p)
+                except OSError:
+                    continue
+        except OSError:
+            continue
+    return found
+
+def _owning_package(binary_path):
+    """Map a binary path to its owning package via dpkg, if available."""
+    import subprocess
+    dpkg = shutil.which("dpkg")
+    if not dpkg:
+        return None
+    try:
+        r = subprocess.run([dpkg, "-S", binary_path], capture_output=True, text=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip().split(":")[0].strip()
+    except Exception:
+        pass
+    return None
+
+def _repair_zero_byte(broken):
+    """Reinstall packages owning the corrupted binaries."""
+    import subprocess
+    pkgs = {}
+    for bp in broken:
+        owner = _owning_package(bp)
+        if owner:
+            pkgs.setdefault(owner, []).append(bp)
+    if not pkgs:
+        print("  Could not map corrupted binaries to packages.")
+        print("  Suggested manual fix: pkg reinstall -y dash bash coreutils")
+        return False
+    pm = shutil.which("pkg") or shutil.which("apt-get")
+    if not pm:
+        print("  No package manager found.")
+        return False
+    fixed = True
+    for pkg, files in pkgs.items():
+        print(f"  Reinstalling {pkg} (owns: {', '.join(os.path.basename(f) for f in files[:4])})")
+        if os.path.basename(pm) == "pkg":
+            cmd = [pm, "reinstall", "-y", pkg]
+        else:
+            cmd = [pm, "install", "--reinstall", "-y", pkg]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            if r.returncode != 0:
+                print(f"    failed: {r.stderr.strip()[-200:]}")
+                fixed = False
+        except Exception as e:
+            print(f"    error: {e}")
+            fixed = False
+    return fixed
+
+def cmd_doctor(args=None):
     import shutil, platform
     from dac.config import load_config, ensure_dirs, CONFIG_DIR, PROJECTS_DIR, SESSIONS_DIR, TASKS_DIR
     from dac import __version__
     checks = []
     ok = True
+    want_fix = bool(getattr(args, "fix", False))
 
     # Python version
     py_ok = sys.version_info >= (3, 10)
@@ -155,6 +228,30 @@ def cmd_doctor():
     ensure_dirs()
     for d in [('config', CONFIG_DIR), ('projects', PROJECTS_DIR), ('sessions', SESSIONS_DIR), ('tasks', TASKS_DIR)]:
         checks.append((d[0] + '_dir', 'ok', str(d[1])))
+
+    # corrupted binaries (0-byte ELF files)
+    broken = _find_zero_byte_binaries()
+    if broken:
+        show = ", ".join(os.path.basename(b) for b in broken[:5])
+        checks.append(('binaries', 'FAIL', f'{len(broken)} zero-byte: {show}'))
+        ok = False
+        if want_fix:
+            checks.append(('repair', 'ok' if _repair_zero_byte(broken) else 'FAIL', '--fix'))
+        else:
+            checks.append(('repair_hint', 'WARN', 'run: dac doctor --fix'))
+    else:
+        checks.append(('binaries', 'ok', 'no zero-byte files'))
+
+    # critical shell binaries
+    for shell in ['bash', 'dash', 'sh', 'python']:
+        spath = shutil.which(shell)
+        if spath is None:
+            checks.append((f'bin_{shell}', 'WARN', 'not found'))
+        elif os.path.getsize(spath) == 0:
+            checks.append((f'bin_{shell}', 'FAIL', f'0 bytes: {spath}'))
+            ok = False
+        else:
+            checks.append((f'bin_{shell}', 'ok', spath))
 
     # termux
     for cmd in ['termux-info', 'termux-device-info']:

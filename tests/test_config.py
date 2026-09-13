@@ -84,3 +84,64 @@ class ConfigTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConfigBackupTest(unittest.TestCase):
+    def setUp(self):
+        if CONFIG_FILE.exists():
+            CONFIG_FILE.unlink()
+        backup = CONFIG_DIR / "config.json.bak"
+        if backup.exists():
+            backup.unlink()
+        tmp = CONFIG_DIR / "config.json.tmp"
+        if tmp.exists():
+            tmp.unlink()
+
+    def tearDown(self):
+        if CONFIG_FILE.exists():
+            CONFIG_FILE.unlink()
+        backup = CONFIG_DIR / "config.json.bak"
+        if backup.exists():
+            backup.unlink()
+        tmp = CONFIG_DIR / "config.json.tmp"
+        if tmp.exists():
+            tmp.unlink()
+
+    def test_save_creates_backup_and_restores_on_corruption(self):
+        cfg = load_config()
+        save_config(cfg)  # first save: creates config, no prior backup needed
+        cfg = load_config()
+        cfg["model"] = "gpt-4o-mini"
+        cfg["api_key"] = "sk-test-1234"
+        save_config(cfg)  # second save: prior config exists -> backup created
+        backup = CONFIG_DIR / "config.json.bak"
+        self.assertTrue(backup.exists())
+        # Corrupt the live config (simulates clipboard/truncation accident).
+        CONFIG_FILE.write_text("garbage!!!", encoding="utf-8")
+        import io, contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            restored = load_config()
+        self.assertIn("restored from backup", buf.getvalue())
+        self.assertEqual(restored["model"], "gpt-4o-mini")
+        self.assertEqual(restored["api_key"], "sk-test-1234")
+        # The corrupt file should have been replaced with the good config.
+        self.assertIn('"gpt-4o-mini"', CONFIG_FILE.read_text(encoding="utf-8"))
+
+    def test_corrupt_with_no_backup_returns_defaults(self):
+        CONFIG_FILE.write_text("also-broken", encoding="utf-8")
+        import io, contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cfg = load_config()
+        self.assertEqual(cfg["model"], "gpt-4o")
+        self.assertIn("resetting to defaults", buf.getvalue())
+
+    def test_empty_config_returns_defaults(self):
+        CONFIG_FILE.write_text("", encoding="utf-8")
+        cfg = load_config()
+        self.assertEqual(cfg["model"], "gpt-4o")
+
+
+if __name__ == "__main__":
+    unittest.main()

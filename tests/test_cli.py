@@ -92,3 +92,38 @@ class CliTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DoctorTest(unittest.TestCase):
+    def test_doctor_ok_when_no_corruption(self):
+        with tempfile.TemporaryDirectory() as home:
+            p = run_cli("doctor", env_extra={"DAC_HOME": home})
+            self.assertEqual(p.returncode, 0)
+            self.assertIn("binaries", p.stdout)
+
+    def test_doctor_detects_zero_byte_binary(self):
+        with tempfile.TemporaryDirectory() as home:
+            fake_prefix = tempfile.mkdtemp()
+            bin_dir = os.path.join(fake_prefix, "bin")
+            os.makedirs(bin_dir)
+            victim = os.path.join(bin_dir, "dac-doctor-victim")
+            open(victim, "w").close()  # 0 bytes
+            env = dict(os.environ)
+            env["DAC_HOME"] = home
+            env["PREFIX"] = fake_prefix
+            p = subprocess.run(
+                [sys.executable, "-m", "dac", "doctor"],
+                capture_output=True, text=True, env=env, cwd=REPO, timeout=60,
+            )
+            self.assertEqual(p.returncode, 0)
+            self.assertIn("FAIL", p.stdout)
+            self.assertIn("zero-byte", p.stdout)
+
+    def test_doctor_fix_flag_present(self):
+        with tempfile.TemporaryDirectory() as home:
+            p = run_cli("doctor", "--fix", env_extra={"DAC_HOME": home})
+            self.assertEqual(p.returncode, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

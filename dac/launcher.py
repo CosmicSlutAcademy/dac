@@ -173,6 +173,7 @@ def main(argv=None):
     p_run.add_argument("code")
     p_run.add_argument("--language", "-l", default="python")
     p_doctor = sub.add_parser("doctor", help="System health check")
+    p_doctor.add_argument("--fix", action="store_true", help="Repair corrupted binaries")
     p_sess = sub.add_parser("sessions", help="List past sessions")
     p_assistant = sub.add_parser("assistant", help="Personal assistant (TTS + notifications)")
     p_assistant.add_argument("--say", help="Speak one message and exit")
@@ -236,7 +237,7 @@ def main(argv=None):
         return cmd_run(args)
     elif args.command == "doctor":
         from dac.cli import cmd_doctor
-        return cmd_doctor()
+        return cmd_doctor(args)
     elif args.command == "sessions":
         from dac.cli import cmd_session
         return cmd_session(args)
