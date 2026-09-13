@@ -137,7 +137,7 @@ fi
 echo ""
 if dac run 'print("DAC installed OK")'; then
   echo ""
-  echo "=== DAC v$VERSION ready ==="
+  echo "=== DAC v__DAC_VERSION__ ready ==="
   echo ""
   echo "  dac --version"
   echo "  dac doctor"
@@ -152,6 +152,9 @@ else
   echo "WARNING: smoke test failed"
 fi
 EOF
+
+# Substitute the build-time version into the quoted heredoc output.
+sed -i "s/__DAC_VERSION__/$VERSION/g" "$OUT"
 
 chmod +x "$OUT"
 echo "Wrote $OUT (v$VERSION, $(wc -l < "$OUT") lines)"
