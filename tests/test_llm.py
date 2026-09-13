@@ -129,3 +129,21 @@ class RetryTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
+
+class ProviderConfigTest(unittest.TestCase):
+    def test_provider_bases_present(self):
+        from dac.core.llm import PROVIDER_BASES
+        for prov in ("openai", "openrouter", "ollama", "groq", "mistral", "together", "deepseek", "cerebras"):
+            self.assertIn(prov, PROVIDER_BASES)
+        self.assertTrue(PROVIDER_BASES["openrouter"].endswith("/v1"))
+
+    def test_keyless_providers_no_key_required(self):
+        from dac.core.llm import KEYLESS_PROVIDERS
+        self.assertIn("ollama", KEYLESS_PROVIDERS)
+        self.assertNotIn("openai", KEYLESS_PROVIDERS)
+
+    def test_missing_key_raises_for_openai(self):
+        from dac.core.llm import complete, LLMError
+        with self.assertRaises(LLMError):
+            complete({"provider": "openai", "api_key": ""}, [])

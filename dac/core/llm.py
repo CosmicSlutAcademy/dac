@@ -8,6 +8,20 @@ import urllib.error
 
 DEFAULT_BASE = "https://api.openai.com/v1"
 
+# One key, many models: OpenAI-compatible endpoints. Set provider=... or base_url=...
+PROVIDER_BASES = {
+    "openai": "https://api.openai.com/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "ollama": "http://localhost:11434/v1",   # local, no key needed
+    "groq": "https://api.groq.com/openai/v1",
+    "mistral": "https://api.mistral.ai/v1",
+    "together": "https://api.together.xyz/v1",
+    "deepseek": "https://api.deepseek.com/v1",
+    "cerebras": "https://api.cerebras.ai/v1",
+}
+
+KEYLESS_PROVIDERS = {"ollama"}
+
 class LLMError(Exception):
     pass
 
@@ -71,17 +85,20 @@ def _chat_completion(api_key, model, messages, max_tokens, temperature, base_url
 
 def complete(cfg, messages):
     """Returns (text, usage) from the configured LLM."""
-    api_key = cfg.get("api_key", "")
-    if not api_key:
-        raise LLMError("No API key configured. Set OPENAI_API_KEY env var or run: dac config --set api_key sk-...")
     provider = cfg.get("provider", "openai")
+    api_key = cfg.get("api_key", "")
+    keyless = provider in KEYLESS_PROVIDERS
+    if not api_key and not keyless:
+        raise LLMError("No API key configured. Set OPENAI_API_KEY env var or run: dac config --set api_key sk-...")
     model = cfg.get("model", "gpt-4o")
     max_tokens = int(cfg.get("max_tokens", 4096))
     temperature = float(cfg.get("temperature", 0.2))
     max_retries = int(cfg.get("max_retries", 3))
-    if provider == "openai":
-        return _chat_completion(api_key, model, messages, max_tokens, temperature, max_retries=max_retries)
-    raise LLMError(f"Unsupported provider: {provider}")
+    base_url = cfg.get("base_url") or PROVIDER_BASES.get(provider, DEFAULT_BASE)
+    if provider in PROVIDER_BASES or provider == "openai":
+        return _chat_completion(api_key, model, messages, max_tokens, temperature,
+                                base_url=base_url, max_retries=max_retries)
+    raise LLMError(f"Unsupported provider: {provider} (set base_url=... for OpenAI-compatible endpoints)")
 
 def extract_code_blocks_with_lang(text):
     """Parse ```python ... ``` (or ```bash```) blocks, returning (language, code) pairs."""
