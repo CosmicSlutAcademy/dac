@@ -15,6 +15,7 @@ PID_FILE = CONFIG_DIR / "dac.pid"
 
 DEFAULTS = {
     "provider": "openai",
+    "fallback_provider": "",
     "model": "gpt-4o",
     "api_key": "",
     "telegram_token": "",

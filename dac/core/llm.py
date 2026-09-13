@@ -83,14 +83,13 @@ def _chat_completion(api_key, model, messages, max_tokens, temperature, base_url
     usage = data.get("usage", {})
     return content, usage
 
-def complete(cfg, messages):
-    """Returns (text, usage) from the configured LLM."""
-    provider = cfg.get("provider", "openai")
+def _call_provider(cfg, messages, provider):
+    """Single provider attempt. Returns (text, usage)."""
     api_key = cfg.get("api_key", "")
     keyless = provider in KEYLESS_PROVIDERS
     if not api_key and not keyless:
         raise LLMError("No API key configured. Set OPENAI_API_KEY env var or run: dac config --set api_key sk-...")
-    model = cfg.get("model", "gpt-4o")
+    model = cfg.get(f"{provider}_model") or cfg.get("model", "gpt-4o")
     max_tokens = int(cfg.get("max_tokens", 4096))
     temperature = float(cfg.get("temperature", 0.2))
     max_retries = int(cfg.get("max_retries", 3))
@@ -99,6 +98,29 @@ def complete(cfg, messages):
         return _chat_completion(api_key, model, messages, max_tokens, temperature,
                                 base_url=base_url, max_retries=max_retries)
     raise LLMError(f"Unsupported provider: {provider} (set base_url=... for OpenAI-compatible endpoints)")
+
+
+def complete(cfg, messages, provider=None):
+    """Returns (text, usage) from the configured LLM.
+
+    Fusion routing: tries `provider` (or cfg['provider']), then falls back to
+    cfg['fallback_provider'] when the first endpoint fails (local → cloud, etc.).
+    """
+    import sys
+    primary = provider or cfg.get("provider", "openai")
+    fallback = cfg.get("fallback_provider", "") or ""
+    try:
+        return _call_provider(cfg, messages, primary)
+    except LLMError as first_err:
+        if fallback and fallback != primary:
+            print(f"[dac] {primary} failed ({first_err}); falling back to {fallback}", file=sys.stderr)
+            try:
+                return _call_provider(cfg, messages, fallback)
+            except LLMError as second_err:
+                raise LLMError(
+                    f"provider {primary} failed ({first_err}); fallback {fallback} failed ({second_err})"
+                ) from second_err
+        raise
 
 def extract_code_blocks_with_lang(text):
     """Parse ```python ... ``` (or ```bash```) blocks, returning (language, code) pairs."""

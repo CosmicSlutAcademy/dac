@@ -54,7 +54,7 @@ def execute_task(task_name, cfg=None, project_dir=None):
         )},
     ]
     try:
-        text, usage = complete(cfg, messages)
+        text, usage = complete(cfg, messages, provider=cfg.get('_provider'))
     except LLMError as e:
         task["status"] = "failed"
         task["error"] = str(e)

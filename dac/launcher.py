@@ -113,6 +113,9 @@ def cmd_quick(args):
     from dac.orchestrator import create_task, execute_task
     from dac.config import load_config
     cfg = load_config()
+    if getattr(args, "provider", None):
+        cfg = dict(cfg)
+        cfg["_provider"] = args.provider
     task_name = f"quick_{int(time.time())}"
     create_task(args.prompt, task_name)
     print(f"[dac] Processing: {args.prompt[:100]}")
@@ -156,9 +159,11 @@ def main(argv=None):
     p_send.add_argument("prompt")
     p_quick = sub.add_parser("quick", help="One-shot: generate + execute")
     p_quick.add_argument("prompt")
+    p_quick.add_argument("--provider", help="Override provider for this run (e.g. ollama)")
     p_repl = sub.add_parser("repl", help="Interactive REPL")
     p_chat = sub.add_parser("chat", help="One-shot chat")
     p_chat.add_argument("prompt")
+    p_chat.add_argument("--provider", help="Override provider for this run (e.g. openrouter)")
     p_cfg = sub.add_parser("config", help="View/set config")
     p_cfg.add_argument("--show", action="store_true")
     p_cfg.add_argument("--set", help="key=value")

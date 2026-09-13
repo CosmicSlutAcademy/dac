@@ -38,7 +38,7 @@ def plan_and_execute(prompt, project_dir, cfg, session, auto_confirm=False):
         }
     ]
     try:
-        plan_text, _ = complete(cfg, plan_messages)
+        plan_text, _ = complete(cfg, plan_messages, provider=cfg.get('_provider'))
         plan = parse_json(plan_text)
     except Exception as e:
         # Fall back to open-ended generation
@@ -76,7 +76,7 @@ def _open_generation(prompt, project_dir, cfg, session):
     from dac.core.llm import complete
 
     messages = session.get_full_messages() + [{"role": "user", "content": prompt}]
-    text, _ = complete(cfg, messages)
+    text, _ = complete(cfg, messages, provider=cfg.get('_provider'))
 
     results = {"files_written": [], "commands_run": [], "errors": [], "text": text}
     blocks = extract_code_blocks_with_lang(text)

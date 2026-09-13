@@ -147,3 +147,61 @@ class ProviderConfigTest(unittest.TestCase):
         from dac.core.llm import complete, LLMError
         with self.assertRaises(LLMError):
             complete({"provider": "openai", "api_key": ""}, [])
+
+
+class FusionRoutingTest(unittest.TestCase):
+    def test_fallback_when_primary_fails(self):
+        cfg = {"provider": "ollama", "fallback_provider": "openrouter", "api_key": "sk-or-test"}
+        msg = [{"role": "user", "content": "hi"}]
+        calls = []
+
+        def fake_call(api_key, model, messages, max_tokens, temperature, base_url, max_retries):
+            calls.append(base_url)
+            if base_url == "http://localhost:11434/v1":
+                raise LLMError("connection refused")
+            return "from-cloud", {"total_tokens": 5}
+
+        from dac.core import llm as llm_mod
+        with patch.object(llm_mod, "_chat_completion", side_effect=fake_call):
+            text, usage = complete(cfg, msg)
+        self.assertEqual(text, "from-cloud")
+        self.assertEqual(len(calls), 2)
+        self.assertIn("openrouter.ai", calls[1])
+
+    def test_no_fallback_raises(self):
+        cfg = {"provider": "openai", "api_key": "sk-x", "fallback_provider": ""}
+        msg = [{"role": "user", "content": "hi"}]
+        from dac.core import llm as llm_mod
+
+        def fake_call(*a, **kw):
+            raise LLMError("HTTP 401: bad key")
+
+        with patch.object(llm_mod, "_chat_completion", side_effect=fake_call):
+            with self.assertRaises(LLMError):
+                complete(cfg, msg)
+
+    def test_explicit_provider_wins(self):
+        cfg = {"provider": "openai", "fallback_provider": "openrouter", "api_key": "sk-x"}
+        msg = [{"role": "user", "content": "hi"}]
+        from dac.core import llm as llm_mod
+        used = []
+        def fake_call(api_key, model, messages, max_tokens, temperature, base_url, max_retries):
+            used.append(base_url)
+            return f"resp-{base_url.split('/')[2]}", {"total_tokens": 3}
+        with patch.object(llm_mod, "_chat_completion", side_effect=fake_call):
+            text, _ = complete(cfg, msg, provider="groq")
+            text2, _ = complete(cfg, msg, provider="mistral")
+        self.assertIn("api.groq.com", used[0])
+        self.assertIn("api.mistral.ai", used[1])
+        self.assertEqual(len(used), 2)
+
+    def test_provider_specific_model_override(self):
+        cfg = {"provider": "openai", "openrouter_model": "anthropic/claude-3.5-sonnet", "api_key": "sk-x"}
+        from dac.core import llm as llm_mod
+        seen = {}
+        def fake_call(api_key, model, messages, max_tokens, temperature, base_url, max_retries):
+            seen["model"] = model
+            return "ok", {}
+        with patch.object(llm_mod, "_chat_completion", side_effect=fake_call):
+            complete(cfg, [{"role": "user", "content": "x"}], provider="openrouter")
+        self.assertEqual(seen["model"], "anthropic/claude-3.5-sonnet")

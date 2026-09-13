@@ -109,11 +109,12 @@ def cmd_chat(args):
     from dac.core.session import Session
     from dac.core.llm import complete, LLMError
     cfg = load_config()
+    provider = getattr(args, "provider", None)
     session = Session()
     session.add_user(args.prompt)
     messages = session.get_full_messages()
     try:
-        text, usage = complete(cfg, messages)
+        text, usage = complete(cfg, messages, provider=provider)
     except LLMError as e:
         print(f"ERROR: {e}")
         return 1
