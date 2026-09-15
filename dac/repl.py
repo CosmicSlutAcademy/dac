@@ -6,7 +6,7 @@ import os
 from dac.config import load_config
 from dac.core.session import Session
 from dac.core.llm import complete, LLMError, extract_code_blocks_with_lang
-from dac.core.autonomous import should_execute, _open_generation
+from dac.core.autonomous import should_execute, _open_generation, sanitize_script
 from dac.core.executor import execute_block, run_cmd
 
 PROMPT = "\033[96m≈dac\033[0m \033[90m>\033[0m "
@@ -17,7 +17,7 @@ ACTION_KEYWORDS = (
     "write script", "write a tool", "new script",
 )
 
-ACTION_WRAP = "\n[ACTION REQUEST: respond ONLY with fenced code blocks (```python or ```bash). End with exactly AUTONOMY_READY. No prose, no numbered lists, no explanation.]\n"
+ACTION_WRAP = "\n[ACTION REQUEST: respond ONLY with fenced code blocks (```python or ```bash). After the closing fence, put AUTONOMY_READY on its own line. AUTONOMY_READY must NEVER appear inside a code block. No prose, no numbered lists, no explanation.]\n"
 
 
 def _is_action_request(text):
@@ -154,9 +154,10 @@ def _execute_code_blocks(text, project_dir, cfg, session):
             p = os.path.join(project_dir, f"auto_{int(time.time())}.{ext}")
             try:
                 from dac.core.executor import write_file
-                write_file(p, block)
+                clean = sanitize_script(block)
+                write_file(p, clean)
                 results["files_written"].append(p)
-                rc, out, _ = execute_block(block, cwd=project_dir, lang=lang)
+                rc, out, _ = execute_block(clean, cwd=project_dir, lang=lang)
                 results["commands_run"].append({"cmd": f"python3 {p}" if lang == "python" else f"bash {p}", "rc": rc, "output": out[:500]})
                 if rc != 0:
                     results["errors"].append(f"Execution failed ({rc}): {p}")

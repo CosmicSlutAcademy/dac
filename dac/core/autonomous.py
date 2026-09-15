@@ -86,9 +86,10 @@ def _open_generation(prompt, project_dir, cfg, session):
             ext = "py" if lang == "python" else "sh"
             p = os.path.join(project_dir, f"generated_{int(time.time())}_{i}.{ext}")
             try:
-                write_file(p, block)
+                clean = sanitize_script(block)
+                write_file(p, clean)
                 results["files_written"].append(p)
-                rc, out, _ = execute_block(block, cwd=project_dir, lang=lang)
+                rc, out, _ = execute_block(clean, cwd=project_dir, lang=lang)
                 results["commands_run"].append({"cmd": f"python3 {p}" if lang == "python" else f"bash {p}", "rc": rc, "output": out[:500]})
                 if rc != 0:
                     results["errors"].append(f"Execution failed ({rc}): {p}")
@@ -103,3 +104,21 @@ def verify_success(results, expected=None):
     if expected and not os.path.exists(expected):
         return False
     return True
+
+
+def sanitize_script(code):
+    """Strip AUTONOMY_READY markers and fix LLM path hallucinations.
+
+    AUTONOMY_READY is a response terminator, not a shell command. LLMs also
+    often write to /root/projects because DAC docs mention it, but that path
+    only exists inside proot (home=/root) -- map it to $HOME/projects.
+    """
+    kept = []
+    for line in code.splitlines():
+        if re.match(r"^\s*AUTONOMY_READY\s*$", line, re.IGNORECASE):
+            continue
+        kept.append(line)
+    code = "\n".join(kept).strip()
+    home = os.path.expanduser("~")
+    return code.replace("/root/projects", os.path.join(home, "projects"))
+

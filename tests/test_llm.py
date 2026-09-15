@@ -155,7 +155,7 @@ class FusionRoutingTest(unittest.TestCase):
         msg = [{"role": "user", "content": "hi"}]
         calls = []
 
-        def fake_call(api_key, model, messages, max_tokens, temperature, base_url, max_retries):
+        def fake_call(api_key, model, messages, max_tokens, temperature, base_url, max_retries, timeout=120):
             calls.append(base_url)
             if base_url == "http://localhost:11434/v1":
                 raise LLMError("connection refused")
@@ -185,7 +185,7 @@ class FusionRoutingTest(unittest.TestCase):
         msg = [{"role": "user", "content": "hi"}]
         from dac.core import llm as llm_mod
         used = []
-        def fake_call(api_key, model, messages, max_tokens, temperature, base_url, max_retries):
+        def fake_call(api_key, model, messages, max_tokens, temperature, base_url, max_retries, timeout=120):
             used.append(base_url)
             return f"resp-{base_url.split('/')[2]}", {"total_tokens": 3}
         with patch.object(llm_mod, "_chat_completion", side_effect=fake_call):
@@ -199,7 +199,7 @@ class FusionRoutingTest(unittest.TestCase):
         cfg = {"provider": "openai", "openrouter_model": "anthropic/claude-3.5-sonnet", "api_key": "sk-x"}
         from dac.core import llm as llm_mod
         seen = {}
-        def fake_call(api_key, model, messages, max_tokens, temperature, base_url, max_retries):
+        def fake_call(api_key, model, messages, max_tokens, temperature, base_url, max_retries, timeout=120):
             seen["model"] = model
             return "ok", {}
         with patch.object(llm_mod, "_chat_completion", side_effect=fake_call):

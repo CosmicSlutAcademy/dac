@@ -64,7 +64,7 @@ def _post_json(url, headers, payload, timeout=120, max_retries=3):
         except Exception as e:
             raise LLMError(f"Network error: {e}") from e
 
-def _chat_completion(api_key, model, messages, max_tokens, temperature, base_url=DEFAULT_BASE, max_retries=3):
+def _chat_completion(api_key, model, messages, max_tokens, temperature, base_url=DEFAULT_BASE, max_retries=3, timeout=120):
     url = f"{base_url.rstrip('/')}/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -76,7 +76,7 @@ def _chat_completion(api_key, model, messages, max_tokens, temperature, base_url
         "max_tokens": max_tokens,
         "temperature": temperature,
     }
-    data = _post_json(url, headers, payload, max_retries=max_retries)
+    data = _post_json(url, headers, payload, max_retries=max_retries, timeout=timeout)
     if "choices" not in data or not data["choices"]:
         raise LLMError("No choices returned")
     content = data["choices"][0]["message"]["content"]
@@ -94,9 +94,12 @@ def _call_provider(cfg, messages, provider):
     temperature = float(cfg.get("temperature", 0.2))
     max_retries = int(cfg.get("max_retries", 3))
     base_url = cfg.get("base_url") or PROVIDER_BASES.get(provider, DEFAULT_BASE)
+    # Local models on-device are slow (swap-bound); give them a long timeout.
+    is_local = base_url.startswith("http://127.0.0.1") or base_url.startswith("http://localhost")
+    timeout = cfg.get("timeout") or (600 if is_local else 120)
     if provider in PROVIDER_BASES or provider == "openai":
         return _chat_completion(api_key, model, messages, max_tokens, temperature,
-                                base_url=base_url, max_retries=max_retries)
+                                base_url=base_url, max_retries=max_retries, timeout=timeout)
     raise LLMError(f"Unsupported provider: {provider} (set base_url=... for OpenAI-compatible endpoints)")
 
 
