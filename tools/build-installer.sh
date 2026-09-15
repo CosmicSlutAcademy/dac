@@ -26,6 +26,14 @@ FILES=(
   dac/core/executor.py
   dac/core/session.py
   dac/core/autonomous.py
+  gcia/__init__.py
+  gcia/__main__.py
+  gcia/audit.py
+  gcia/laptop.py
+  gcia/launcher.py
+  gcia/policy.py
+  gcia/recon.py
+  gcia/vault.py
   setup.py
   README.md
 )
@@ -100,7 +108,7 @@ fi
 
 # --- dirs ---
 echo "[4/7] Creating \$DEST..."
-mkdir -p "\$DEST/dac/commands" "\$DEST/dac/core"
+mkdir -p "\$DEST/dac/commands" "\$DEST/dac/core" "\$DEST/gcia"
 
 # --- write source files ---
 echo "[5/7] Writing source files..."
