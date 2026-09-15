@@ -113,6 +113,7 @@ def cmd_chat(args):
     session = Session()
     session.add_user(args.prompt)
     messages = session.get_full_messages()
+    print("thinking...", flush=True)
     try:
         text, usage = complete(cfg, messages, provider=provider)
     except LLMError as e:
