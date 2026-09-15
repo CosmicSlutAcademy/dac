@@ -79,6 +79,57 @@ def cmd_brief(args):
     return 0
 
 
+def cmd_alert(args):
+    from gcia.notify import push_alert
+    push_alert(args.title, args.message, sound=args.sound)
+    return 0
+
+
+def cmd_patrol(args):
+    from gcia.patrol import one_patrol, patrol_loop
+    if args.once:
+        one_patrol(sound=args.sound)
+        return 0
+    print(f"GCIA patrol started — audit + alert every {args.interval}h (Ctrl-C to stop)")
+    patrol_loop(interval_hours=args.interval, sound=args.sound)
+    return 0
+
+
+def cmd_remote(args):
+    from gcia.remote import grant, revoke, peers, remote_audit, remote_scan
+    if args.action == "grant":
+        a = grant(args.name, args.pubkey)
+        print(f"Granted {args.name} (key {a['key_id'][:16]}…): {','.join(a['allowed'])}")
+        print("Peer can now SSH in and run only GCIA commands.")
+        return 0
+    if args.action == "revoke":
+        revoke(args.name)
+        print(f"Revoked {args.name}")
+        return 0
+    if args.action == "list":
+        ps = peers()
+        if not ps:
+            print("No peers granted.")
+        for name, info in ps.items():
+            print(f"  {name}: {info['key_id'][:16]}… allowed={','.join(info['allowed'])}")
+        return 0
+    if args.action == "audit":
+        out = remote_audit(args.user, args.host, args.port, args.key)
+        print(out)
+        return 0
+    if args.action == "scan":
+        out = remote_scan(args.user, args.host, args.target, args.port, args.key)
+        print(out)
+        return 0
+    print("Unknown action")
+    return 1
+
+
+def cmd_agent(args):
+    from gcia.agent import handle
+    return handle(args.original)
+
+
 def cmd_laptop(args):
     from gcia.laptop import ssh_keypair, start_sshd
     priv, pub = ssh_keypair()
@@ -124,6 +175,47 @@ def build_parser():
     b.add_argument("--output", default=None)
     b.add_argument("--checklist", action="store_true")
     b.set_defaults(func=cmd_brief)
+
+    al = sub.add_parser("alert", help="push a notification to this phone")
+    al.add_argument("--title", default="GCIA")
+    al.add_argument("--message", required=True)
+    al.add_argument("--sound", action="store_true", help="also speak the alert")
+    al.set_defaults(func=cmd_alert)
+
+    pt = sub.add_parser("patrol", help="periodic audit + phone alerts")
+    pt.add_argument("--interval", type=float, default=2, help="hours between patrols")
+    pt.add_argument("--once", action="store_true", help="run one audit then exit")
+    pt.add_argument("--sound", action="store_true")
+    pt.set_defaults(func=cmd_patrol)
+
+    r = sub.add_parser("remote", help="auth-granted remote modes (Wardencliffe Towers)")
+    ra = r.add_subparsers(dest="action", required=True)
+    rg = ra.add_parser("grant", help="authorize a peer (laptop) key")
+    rg.add_argument("name")
+    rg.add_argument("pubkey", help="path to the peer's .pub file")
+    rg.set_defaults(func=cmd_remote)
+    rr = ra.add_parser("revoke", help="remove a peer")
+    rr.add_argument("name")
+    rr.set_defaults(func=cmd_remote)
+    rl = ra.add_parser("list", help="list granted peers")
+    rl.set_defaults(func=cmd_remote)
+    rra = ra.add_parser("audit", help="run remote audit on a granted peer")
+    rra.add_argument("user")
+    rra.add_argument("host")
+    rra.add_argument("--port", type=int, default=2222)
+    rra.add_argument("--key", default=None)
+    rra.set_defaults(func=cmd_remote)
+    rrs = ra.add_parser("scan", help="run remote scan via a granted peer")
+    rrs.add_argument("user")
+    rrs.add_argument("host")
+    rrs.add_argument("target")
+    rrs.add_argument("--port", type=int, default=2222)
+    rrs.add_argument("--key", default=None)
+    rrs.set_defaults(func=cmd_remote)
+
+    ag = sub.add_parser("agent", help="SSH forced-command handler (internal)")
+    ag.add_argument("original", nargs="*", default=None)
+    ag.set_defaults(func=cmd_agent)
 
     l = sub.add_parser("laptop", help="link this device to your laptop via SSH")
     l.add_argument("--port", type=int, default=2222)

@@ -13,6 +13,7 @@ setup(
             "dac-repl=dac.repl:main",
             "gcia=gcia.launcher:main",
             "gciau=gcia.launcher:gciau_main",
+            "gcia-agent=gcia.agent:main",
         ],
     },
 )

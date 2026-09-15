@@ -202,10 +202,16 @@ def serve(port=8080, out_dir=None, cfg=None):
 
 
 def auto_loop(interval_hours=ROTATION_HOURS, out_dir=None, cfg=None):
-    """Run forever, rotating the featured protection every interval_hours."""
+    """Run forever, rotating the featured protection every interval_hours
+    and running a GCIA patrol (audit + phone alert) on each rotation."""
     cfg = cfg or load_config()
     while True:
         update(out_dir=out_dir, cfg=cfg)
+        try:
+            from gcia.patrol import one_patrol
+            one_patrol()
+        except Exception as e:
+            print(f"[site] gcia patrol skipped: {e}")
         time.sleep(interval_hours * 3600)
 
 

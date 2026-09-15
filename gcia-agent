@@ -1,0 +1,3 @@
+#!/bin/sh
+# gcia-agent entry for forced-command SSH. Kept tiny; logic lives in Python.
+exec /usr/local/bin/gcia-agent "$@"

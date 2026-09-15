@@ -34,6 +34,10 @@ FILES=(
   gcia/policy.py
   gcia/recon.py
   gcia/vault.py
+  gcia/notify.py
+  gcia/patrol.py
+  gcia/remote.py
+  gcia/agent.py
   setup.py
   README.md
 )
@@ -123,6 +127,10 @@ cat >> "$OUT" <<'EOF'
 
 # --- install ---
 echo "[6/7] Installing DAC globally..."
+cp "$DEST/gcia-agent" /usr/local/bin/gcia-agent 2>/dev/null || true
+chmod +x /usr/local/bin/gcia-agent 2>/dev/null || true
+cp "$DEST/gcia-agent" "$PREFIX/bin/gcia-agent" 2>/dev/null || true
+chmod +x "$PREFIX/bin/gcia-agent" 2>/dev/null || true
 cd "$DEST"
 PIP_FLAGS=""
 if [ "$PM" = "apt" ]; then PIP_FLAGS="--break-system-packages"; fi

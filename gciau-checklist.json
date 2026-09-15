@@ -1,0 +1,30 @@
+{
+  "checklist": [
+    {
+      "id": "phishing",
+      "status": "pending",
+      "action": "Social engineering & phishing awareness: verify sender identity, never click unexpected links, use a password manager, enable 2FA on every account."
+    },
+    {
+      "id": "deepfake",
+      "status": "pending",
+      "action": "Deepfake/media authenticity: treat high-stakes voice/video requests as untrusted until verified out-of-band; keep a family code word."
+    },
+    {
+      "id": "device",
+      "status": "pending",
+      "action": "Endpoint hardening: keep OS updated, lock screen immediately, disable unknown-sources installs, review app permissions quarterly."
+    },
+    {
+      "id": "network",
+      "status": "pending",
+      "action": "Network hygiene: change default router credentials, use WPA2/WPA3, segment IoT devices, disable UPnP, rotate admin passwords."
+    },
+    {
+      "id": "data",
+      "status": "pending",
+      "action": "Data sovereignty: back up critical files offline, encrypt sensitive files, minimize cloud exposure, audit sharing links monthly."
+    }
+  ],
+  "count": 5
+}
