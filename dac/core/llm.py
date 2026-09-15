@@ -103,12 +103,32 @@ def _call_provider(cfg, messages, provider):
     raise LLMError(f"Unsupported provider: {provider} (set base_url=... for OpenAI-compatible endpoints)")
 
 
+def _compact_for_local(cfg, messages):
+    """Local models are slow: swap the long system prompt for a compact one."""
+    base_url = cfg.get("base_url") or ""
+    is_local = base_url.startswith("http://127.0.0.1") or base_url.startswith("http://localhost")
+    if not is_local:
+        return messages
+    try:
+        from dac.core.session import SYSTEM_PROMPT, SYSTEM_PROMPT_SHORT
+    except Exception:
+        return messages
+    out = []
+    for m in messages:
+        if m.get("role") == "system" and m.get("content") == SYSTEM_PROMPT:
+            out.append({"role": "system", "content": SYSTEM_PROMPT_SHORT})
+        else:
+            out.append(m)
+    return out
+
+
 def complete(cfg, messages, provider=None):
     """Returns (text, usage) from the configured LLM.
 
     Fusion routing: tries `provider` (or cfg['provider']), then falls back to
     cfg['fallback_provider'] when the first endpoint fails (local → cloud, etc.).
     """
+    messages = _compact_for_local(cfg, messages)
     import sys
     primary = provider or cfg.get("provider", "openai")
     fallback = cfg.get("fallback_provider", "") or ""
