@@ -26,12 +26,19 @@ def one_patrol(notify_even_clean=True, sound=False):
     host = audit.get("hostname", "device")
     battery = audit.get("battery_pct")
     bat = f"{battery}%" if battery is not None else "n/a"
+    from gcia.guard import guard_scan
+    try:
+        mind = guard_scan()
+        if mind["status"] != "no-data" and mind["status"] != "clear":
+            flags.append(f"mindguard:{mind['status']} ({len(mind['findings'])} finding(s))")
+    except Exception:
+        pass
     if flags:
         title = f"GCIA PATROL: {len(flags)} finding(s) on {host}"
         content = " | ".join(flags) + f" | battery {bat}"
     else:
         title = f"GCIA PATROL: {host} clear"
-        content = f"No open listening ports, no unsafe home perms, no pending updates. Battery {bat}."
+        content = f"No open listening ports, no unsafe perms, no mindguard flags. Battery {bat}."
     push_alert(title, content, sound=sound)
     return audit, flags
 

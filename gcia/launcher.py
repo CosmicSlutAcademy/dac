@@ -79,6 +79,57 @@ def cmd_brief(args):
     return 0
 
 
+def cmd_contact_log(args):
+    from gcia.contactlog import add_entry, list_entries, stats, export_plain, drop_entry, _GALACTIC_NOTE
+    if args.action == "add":
+        e = add_entry(args.text, mode=args.mode, mood=args.mood, sleep_h=args.sleep,
+                      stress=args.stress, context=args.context, label=args.label,
+                      tags=args.tags.split(",") if args.tags else None)
+        print(f"Contact logged: {e['id']} [{e['mode']}/{e['label']}]")
+        return 0
+    if args.action == "list":
+        es = list_entries(limit=args.limit)
+        if not es:
+            print("No contact-log entries yet. Add one with: gcia contact-log add --text \"...\"")
+        for e in es:
+            print(f"{e['ts']}  {e['id']}  [{e.get('mode')}/{e.get('label')}]  sleep={e.get('sleep_h')} stress={e.get('stress')}")
+            if e.get("context"):
+                print(f"  context: {e['context']}")
+            print(f"  {e['content']}")
+        return 0
+    if args.action == "stats":
+        import json as _json
+        print(_json.dumps(stats(), indent=2))
+        return 0
+    if args.action == "export":
+        out = export_plain(args.output)
+        print(f"Exported (mode 0600): {out}")
+        return 0
+    if args.action == "drop":
+        ok = drop_entry(args.id)
+        print("Removed" if ok else "not found")
+        return 0 if ok else 1
+    print(_GALACTIC_NOTE)
+    return 0
+
+
+def cmd_guard(args):
+    from gcia.guard import guard_scan, format_report
+    r = guard_scan(limit=args.limit)
+    print(format_report(r))
+    return 0
+
+
+def cmd_deck(args):
+    from gcia.deck import serve
+    try:
+        serve(host=args.host, port=args.port, token=args.token)
+    except SystemExit as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_alert(args):
     from gcia.notify import push_alert
     push_alert(args.title, args.message, sound=args.sound)
@@ -175,6 +226,40 @@ def build_parser():
     b.add_argument("--output", default=None)
     b.add_argument("--checklist", action="store_true")
     b.set_defaults(func=cmd_brief)
+
+    cl = sub.add_parser("contact-log", help="encrypted mind-layer evidence journal (GCIA)")
+    cla = cl.add_subparsers(dest="action", required=True)
+    cl_add = cla.add_parser("add", help="append an encrypted entry")
+    cl_add.add_argument("--text", required=True)
+    cl_add.add_argument("--mode", default="awake", choices=["awake", "dream", "hypnagogic", "meditation", "other"])
+    cl_add.add_argument("--mood", default="calm", choices=["calm", "neutral", "focused", "anxious", "overwhelmed", "euphoric", "other"])
+    cl_add.add_argument("--sleep", type=float, default=None, help="hours slept (0-24)")
+    cl_add.add_argument("--stress", type=int, default=None, help="stress 1-10")
+    cl_add.add_argument("--context", default="")
+    cl_add.add_argument("--label", default="speculative", choices=["speculative", "insight", "dream", "distress", "memory", "other"])
+    cl_add.add_argument("--tags", default=None, help="comma-separated tags")
+    cl_add.set_defaults(func=cmd_contact_log)
+    cl_list = cla.add_parser("list", help="decrypt and show recent entries")
+    cl_list.add_argument("--limit", type=int, default=10)
+    cl_list.set_defaults(func=cmd_contact_log)
+    cl_stats = cla.add_parser("stats", help="journal statistics")
+    cl_stats.set_defaults(func=cmd_contact_log)
+    cl_exp = cla.add_parser("export", help="export plaintext journal")
+    cl_exp.add_argument("--output", required=True)
+    cl_exp.set_defaults(func=cmd_contact_log)
+    cl_drop = cla.add_parser("drop", help="remove one entry by id")
+    cl_drop.add_argument("id")
+    cl_drop.set_defaults(func=cmd_contact_log)
+
+    gu = sub.add_parser("guard", help="mindguard predictive care scan (GCIAu)")
+    gu.add_argument("--limit", type=int, default=30)
+    gu.set_defaults(func=cmd_guard)
+
+    dk = sub.add_parser("deck", help="GCI Command Deck web UI (GCIA + GCIAu)")
+    dk.add_argument("--host", default="127.0.0.1")
+    dk.add_argument("--port", type=int, default=8890)
+    dk.add_argument("--token", default=None, help="required when exposing on LAN")
+    dk.set_defaults(func=cmd_deck)
 
     al = sub.add_parser("alert", help="push a notification to this phone")
     al.add_argument("--title", default="GCIA")

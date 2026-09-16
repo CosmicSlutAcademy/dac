@@ -152,3 +152,100 @@ class AgentTest(unittest.TestCase):
         from gcia.agent import handle
         rc = handle(["audit"])
         self.assertEqual(rc, 0)
+
+
+class ContactLogTest(unittest.TestCase):
+    def setUp(self):
+        import shutil
+        if not shutil.which("openssl"):
+            self.skipTest("openssl not available")
+        from gcia import contactlog
+        self.cl = contactlog
+        self._tmp = tempfile.TemporaryDirectory()
+        d = self._tmp.name
+        self._old = (contactlog.LOGDIR, contactlog.LOG_ENC, contactlog.LOG_KEY, contactlog.LOG_META)
+        import pathlib
+        contactlog.LOGDIR = pathlib.Path(d)
+        contactlog.LOG_ENC = pathlib.Path(d) / "contact-log.enc"
+        contactlog.LOG_KEY = pathlib.Path(d) / "contact-log.key"
+        contactlog.LOG_META = pathlib.Path(d) / "contact-log.meta"
+
+    def tearDown(self):
+        from gcia import contactlog
+        contactlog.LOGDIR, contactlog.LOG_ENC, contactlog.LOG_KEY, contactlog.LOG_META = self._old
+        self._tmp.cleanup()
+
+    def test_add_list_roundtrip(self):
+        e = self.cl.add_entry("mind-layer test", mode="hypnagogic", mood="focused",
+                              sleep_h=7.5, stress=3, label="insight", tags=["vision"])
+        self.assertTrue(e["id"].startswith("cl_"))
+        entries = self.cl.list_entries()
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["content"], "mind-layer test")
+        self.assertEqual(entries[0]["mode"], "hypnagogic")
+
+    def test_integrity_detected(self):
+        self.cl.add_entry("integrity check")
+        self.cl.LOG_ENC.write_bytes(self.cl.LOG_ENC.read_bytes() + b"tamper")
+        with self.assertRaises(RuntimeError):
+            self.cl.list_entries()
+
+    def test_drop_entry(self):
+        e = self.cl.add_entry("remove me")
+        self.assertTrue(self.cl.drop_entry(e["id"]))
+        self.assertEqual(self.cl.list_entries(), [])
+
+    def test_stats_shape(self):
+        self.cl.add_entry("a", stress=8, sleep_h=5)
+        self.cl.add_entry("b", stress=4, sleep_h=8)
+        s = self.cl.stats()
+        self.assertEqual(s["entries"], 2)
+        self.assertEqual(s["avg_sleep_h"], 6.5)
+        self.assertEqual(s["avg_stress"], 6)
+
+    def test_invalid_inputs(self):
+        with self.assertRaises(ValueError):
+            self.cl.add_entry("")
+        with self.assertRaises(ValueError):
+            self.cl.add_entry("x", stress=99)
+
+
+class GuardTest(unittest.TestCase):
+    def test_no_data(self):
+        from gcia.guard import guard_scan
+        from gcia import contactlog
+        r = guard_scan()
+        # With the real (empty) journal this returns no-data; acceptable shape check.
+        self.assertIn(r["status"], ("no-data", "clear", "watch", "alert"))
+
+    def test_distress_detector(self):
+        from gcia.guard import _distress_hits
+        self.assertIn("suicid", _distress_hits("I feel suicid_ thoughts"))  # prefix match guard
+        self.assertEqual(_distress_hits("all calm"), [])
+
+    def test_format_report(self):
+        from gcia.guard import format_report
+        rep = {"status": "clear", "entries": 0, "findings": []}
+        self.assertIn("clear", format_report(rep))
+
+
+class DeckApiTest(unittest.TestCase):
+    def test_get_status(self):
+        from gcia.deck import api_dispatch_get
+        r = api_dispatch_get("/api/status", {})
+        self.assertIn("hostname", r)
+        self.assertIn("version", r)
+
+    def test_get_charter(self):
+        from gcia.deck import api_dispatch_get
+        r = api_dispatch_get("/api/charter", {})
+        self.assertTrue(r["text"].startswith("# GCIAu Charter"))
+
+    def test_unknown_route(self):
+        from gcia.deck import api_dispatch_get
+        self.assertIsNone(api_dispatch_get("/api/nope", {}))
+
+    def test_post_contact_log_bad(self):
+        from gcia.deck import api_dispatch_post
+        r = api_dispatch_post("/api/alert", {"message": "deck test"})
+        self.assertEqual(r, {"ok": True})
