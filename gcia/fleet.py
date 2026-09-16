@@ -91,10 +91,15 @@ def _role(name):
 
 def _expand(cmd_template, args):
     out = []
+    if isinstance(args, list):
+        args = dict(zip([t[1:-1] for t in cmd_template if t.startswith("{")],
+                        list(args)))
+    if not isinstance(args, dict):
+        args = {}
     for tok in cmd_template:
         if tok.startswith("{"):
             key = tok[1:-1]
-            val = args.get(key, "") if isinstance(args, dict) else ""
+            val = args.get(key, "")
             if not val:
                 return None
             out.append(val)
@@ -103,8 +108,15 @@ def _expand(cmd_template, args):
     return out
 
 
-def run_role(name, args=None, timeout=None):
-    """Execute a specialist's scoped command. Args: dict for templated roles."""
+def run_role(name, args=None, timeout=None, approve=False):
+    """Execute a specialist's scoped command through the BVH gate.
+
+    Every pilot action is previewed by the Behavior Verification Harness
+    (gcia/bvh.py). `warn` verdicts (mutations) require `approve=True`; `deny`
+    verdicts fail closed unless the operator escalates via `gcia bvh run --force`.
+    """
+    import shlex
+    from gcia.bvh import run as _bvh_run
     role = _role(name)
     if not role:
         return {"role": name, "ok": False, "error": f"unknown role {name!r}"}
@@ -116,16 +128,16 @@ def run_role(name, args=None, timeout=None):
     cmd = _expand(tmpl, args or {})
     if cmd is None:
         return {"role": name, "ok": False, "error": "missing required arguments"}
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True,
-                           timeout=timeout or TIMEOUTS.get(name, 60))
-        out = (r.stdout + r.stderr).strip()[:4000]
-        return {"role": name, "ok": r.returncode == 0, "rc": r.returncode,
-                "output": out or "(no output)"}
-    except subprocess.TimeoutExpired:
-        return {"role": name, "ok": False, "error": "timeout"}
-    except Exception as e:
-        return {"role": name, "ok": False, "error": str(e)[:200]}
+    command = shlex.join(cmd)
+    res = _bvh_run(command, approve=approve, timeout=timeout or TIMEOUTS.get(name, 60))
+    if res.get("verdict") in ("deny", "require-approval"):
+        return {"role": name, "ok": False, "verdict": res.get("verdict"),
+                "rule": res.get("rule"), "registry": res.get("registry"),
+                "error": res.get("why", res.get("output", ""))[:400]}
+    return {"role": name, "ok": res.get("ok", False), "rc": res.get("rc"),
+            "verdict": res.get("verdict"), "rule": res.get("rule"),
+            "registry": res.get("registry"),
+            "output": res.get("output", "") or "(no output)"}
 
 
 def _llm_assign(task):
@@ -197,7 +209,7 @@ def fleet_brief(task):
     results = []
     for role in roles:
         args = args_map.get(role, {})
-        results.append(run_role(role, args=args))
+        results.append(run_role(role, args=args, approve=False))
     report = _synthesize(task, results)
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S")
     out_path = MISSION_DIR / f"mission-{ts}.md"

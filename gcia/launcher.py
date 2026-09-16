@@ -225,7 +225,7 @@ def cmd_fleet(args):
             print(f"{r['rank'].upper():8s} {r['name']:16s} {r['mission']}")
         return 0
     if args.action == "run":
-        r = fleet.run_role(args.role, args=args.args or None)
+        r = fleet.run_role(args.role, args=args.args or None, approve=args.approve)
         if not r["ok"]:
             print(f"[{r['role']}] FAILED: {r.get('error', '')}")
             return 1
@@ -423,9 +423,11 @@ def build_parser():
     fla = fl.add_subparsers(dest="action", required=True)
     fl_ro = fla.add_parser("roster", help="list all specialists")
     fl_ro.set_defaults(func=cmd_fleet)
-    fl_run = fla.add_parser("run", help="execute one specialist")
+    fl_run = fla.add_parser("run", help="execute one specialist through the BVH gate")
     fl_run.add_argument("role")
     fl_run.add_argument("args", nargs="*", default=None)
+    fl_run.add_argument("--approve", action="store_true",
+                        help="approve mutating actions (Human Authorization §MDH-ATA-57)")
     fl_run.set_defaults(func=cmd_fleet)
     fl_br = fla.add_parser("brief", help="run a mission: principal assigns, pilots execute")
     fl_br.add_argument("task")

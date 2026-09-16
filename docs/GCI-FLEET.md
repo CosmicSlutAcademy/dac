@@ -26,6 +26,18 @@ gcia fleet status                # deck/llm/telegram/sshd health
 `fleet brief` prints the mission plan, per-pilot results, the synthesized
 report, and saves it to `~/.gcia/fleet/mission-<ts>.md` (mode 0600).
 
+## BVH gate
+
+Every pilot action routes through the Behavior Verification Harness
+(`docs/GCI-BVH.md`): preview rules → execute → verify → journal.
+
+- `allow` actions run immediately (investigation tools).
+- `warn` actions (mutations, `dac quick`, network) are blocked unless you
+  approve them: `gcia fleet run <role> <args> --approve`.
+- `deny` actions fail closed and never execute from the fleet.
+- `fleet brief` missions run fail-closed (no auto-approvals): blocked actions
+  appear in the mission report, and you rerun them with an explicit `--approve`.
+
 ## Rules
 
 - Captains never execute tools directly — they assign.

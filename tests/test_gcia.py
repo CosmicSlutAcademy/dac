@@ -472,3 +472,25 @@ class BvhTest(unittest.TestCase):
         self.assertEqual(r["verdict"], "deny")
         a = api_dispatch_get("/api/bvh/anomaly", {})
         self.assertIn("status", a)
+
+
+class FleetBvhIntegrationTest(unittest.TestCase):
+    def test_pilot_code_requires_approval(self):
+        from gcia.fleet import run_role
+        r = run_role("pilot-code", args=["echo hi"])
+        self.assertFalse(r["ok"])
+        self.assertIn("approval", r.get("error", "").lower())
+
+    def test_pilot_contact_routed_through_bvh(self):
+        from gcia.fleet import run_role
+        r = run_role("pilot-contact", args=["stats"])
+        self.assertTrue(r["ok"])
+        self.assertEqual(r.get("verdict"), "allow")
+        self.assertIn("entries", r["output"])
+
+    def test_pilot_audit_reports_verdict(self):
+        from gcia.fleet import run_role
+        r = run_role("pilot-audit")
+        self.assertTrue(r["ok"])
+        self.assertEqual(r.get("verdict"), "allow")
+        self.assertIn("hostname", r["output"])

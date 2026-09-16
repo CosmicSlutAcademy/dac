@@ -40,9 +40,12 @@ RULES = [
     {"id": "BVH-W02", "registry": "§MDH-ATA-57", "verdict": "warn",
      "pattern": r"ssh\s+[^\n]+@|curl\s+-sS?L?\s+[^\n]+api|wget\s",
      "why": "Network interaction — requires operator approval."},
+    {"id": "BVH-W03", "registry": "§MDH-ATA-38", "verdict": "warn",
+     "pattern": r"^dac\b.*quick\b",
+     "why": "Autonomous code execution — requires operator approval."},
     # --- ALLOW — read-only / investigation (§MDH-ATA-25 evidence fabric) ---
     {"id": "BVH-A01", "registry": "§MDH-ATA-25", "verdict": "allow",
-     "pattern": r"^(gcia|dac|python3? -c|cat|ls|echo|date|whoami|id|pwd|uptime|uname|ps|ss|netstat|df|free|mount|git status|git log|git diff|curl -sI|grep|rg|find|head|tail|wc|stat|cksum|sha256sum|hostname|env|printf)\b.*",
+     "pattern": r"^(gcia|python3? -c|cat|ls|echo|date|whoami|id|pwd|uptime|uname|ps|ss|netstat|df|free|mount|git status|git log|git diff|curl -sI|grep|rg|find|head|tail|wc|stat|cksum|sha256sum|hostname|env|printf)\b.*",
      "why": "Read-only or established investigation tool."},
 ]
 
