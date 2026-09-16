@@ -109,7 +109,41 @@ def cmd_contact_log(args):
         ok = drop_entry(args.id)
         print("Removed" if ok else "not found")
         return 0 if ok else 1
+    if args.action == "rotate":
+        from gcia.contactlog import rotate_key
+        r = rotate_key()
+        print(f"Rotated: {r['entries']} entries re-encrypted with a fresh key.")
+        print(f"Backup kept: {', '.join(r['backup'] or [])}")
+        return 0
+    if args.action == "backup":
+        from gcia.contactlog import backup
+        pair = backup()
+        print("Backup written:" if pair else "Nothing to back up yet.")
+        for p in pair or []:
+            print(f"  {p}")
+        return 0
     print(_GALACTIC_NOTE)
+    return 0
+
+
+def cmd_telegram(args):
+    from gcia.notify import set_telegram, clear_telegram, telegram_alert, telegram_config
+    if args.action == "set":
+        p = set_telegram(args.token, args.chat_id)
+        print(f"Telegram alert config saved: {p} (mode 0600)")
+        return 0
+    if args.action == "clear":
+        print("Cleared" if clear_telegram() else "no config")
+        return 0
+    if args.action == "test":
+        cfg = telegram_config()
+        if not cfg.get("chat_id"):
+            print("Not configured. Run: gcia telegram set <token> <chat_id>")
+            return 1
+        ok = telegram_alert("GCIA test", "Telegram alert channel is online.")
+        print("sent" if ok else "failed")
+        return 0 if ok else 1
+    print("use: gcia telegram set <token> <chat_id> | clear | test")
     return 0
 
 
@@ -250,6 +284,21 @@ def build_parser():
     cl_drop = cla.add_parser("drop", help="remove one entry by id")
     cl_drop.add_argument("id")
     cl_drop.set_defaults(func=cmd_contact_log)
+    cl_rot = cla.add_parser("rotate", help="re-encrypt under a fresh key (old material backed up)")
+    cl_rot.set_defaults(func=cmd_contact_log)
+    cl_bk = cla.add_parser("backup", help="copy encrypted journal + key to ~/.gcia/backups")
+    cl_bk.set_defaults(func=cmd_contact_log)
+
+    tg = sub.add_parser("telegram", help="configure off-device alert channel (GCIAu)")
+    tga = tg.add_subparsers(dest="action", required=True)
+    tgs = tga.add_parser("set", help="save bot token + chat id")
+    tgs.add_argument("token")
+    tgs.add_argument("chat_id")
+    tgs.set_defaults(func=cmd_telegram)
+    tgc = tga.add_parser("clear", help="remove saved telegram config")
+    tgc.set_defaults(func=cmd_telegram)
+    tgt = tga.add_parser("test", help="send a test alert")
+    tgt.set_defaults(func=cmd_telegram)
 
     gu = sub.add_parser("guard", help="mindguard predictive care scan (GCIAu)")
     gu.add_argument("--limit", type=int, default=30)

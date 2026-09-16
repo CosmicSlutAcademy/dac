@@ -249,3 +249,103 @@ class DeckApiTest(unittest.TestCase):
         from gcia.deck import api_dispatch_post
         r = api_dispatch_post("/api/alert", {"message": "deck test"})
         self.assertEqual(r, {"ok": True})
+
+
+class DeckImmunityTest(unittest.TestCase):
+    def test_host_allowed_loopback(self):
+        from gcia.deck import host_allowed
+        self.assertTrue(host_allowed("127.0.0.1:8890", None))
+        self.assertTrue(host_allowed("localhost:8890", None))
+        self.assertFalse(host_allowed("evil.example", None))
+        self.assertTrue(host_allowed("evil.example", "s3cret"))
+
+    def test_rate_ok_budget(self):
+        from gcia.deck import rate_ok, _hits
+        _hits.clear()
+        for _ in range(25):
+            self.assertTrue(rate_ok("1.2.3.4", "POST"))
+        self.assertFalse(rate_ok("1.2.3.4", "POST"))
+        self.assertTrue(rate_ok("9.9.9.9", "POST"))  # other IP unaffected
+
+    def test_immunity_checks(self):
+        from gcia.deck import api_dispatch_get
+        r = api_dispatch_get("/api/immunity", {})
+        names = [c["name"] for c in r["checks"]]
+        self.assertIn("contact-log integrity", names)
+        self.assertIn("csrf", names)
+
+    def test_storm_key_generation(self):
+        import pathlib
+        from gcia.deck import api_dispatch_post
+        with tempfile.TemporaryDirectory() as d:
+            old_home = os.environ.get("HOME")
+            os.environ["HOME"] = d
+            try:
+                r = api_dispatch_post("/api/remote/generate-key", {})
+            finally:
+                if old_home is not None:
+                    os.environ["HOME"] = old_home
+            self.assertTrue(r["public_key"].startswith("ssh-ed25519"))
+
+
+class TelegramAlertTest(unittest.TestCase):
+    def setUp(self):
+        from gcia import notify
+        self.nt = notify
+        self._tmp = tempfile.TemporaryDirectory()
+        import pathlib
+        self._old = notify.TG_CONF
+        notify.TG_CONF = pathlib.Path(self._tmp.name) / "telegram.json"
+
+    def tearDown(self):
+        from gcia import notify
+        notify.TG_CONF = self._old
+        self._tmp.cleanup()
+
+    def test_unconfigured_returns_false(self):
+        self.assertFalse(self.nt.telegram_alert("t", "c"))
+
+    def test_set_and_clear(self):
+        p = self.nt.set_telegram("tok123", "chat99")
+        self.assertTrue(p.endswith("telegram.json"))
+        self.assertEqual(self.nt.telegram_config()["chat_id"], "chat99")
+        self.assertTrue(self.nt.clear_telegram())
+        self.assertEqual(self.nt.telegram_config(), {})
+
+
+class ContactLogRotationTest(unittest.TestCase):
+    def setUp(self):
+        import shutil
+        if not shutil.which("openssl"):
+            self.skipTest("openssl not available")
+        from gcia import contactlog
+        self.cl = contactlog
+        self._tmp = tempfile.TemporaryDirectory()
+        d = self._tmp.name
+        import pathlib
+        self._old = (contactlog.LOGDIR, contactlog.LOG_ENC, contactlog.LOG_KEY, contactlog.LOG_META)
+        contactlog.LOGDIR = pathlib.Path(d)
+        contactlog.LOG_ENC = pathlib.Path(d) / "contact-log.enc"
+        contactlog.LOG_KEY = pathlib.Path(d) / "contact-log.key"
+        contactlog.LOG_META = pathlib.Path(d) / "contact-log.meta"
+
+    def tearDown(self):
+        from gcia import contactlog
+        contactlog.LOGDIR, contactlog.LOG_ENC, contactlog.LOG_KEY, contactlog.LOG_META = self._old
+        self._tmp.cleanup()
+
+    def test_rotate_preserves_entries_backs_up(self):
+        self.cl.add_entry("before rotate")
+        old_key = self.cl.LOG_KEY.read_text()
+        r = self.cl.rotate_key()
+        self.assertEqual(r["entries"], 1)
+        self.assertTrue(r["backup"])
+        self.assertNotEqual(self.cl.LOG_KEY.read_text(), old_key)
+        self.assertEqual(self.cl.list_entries()[0]["content"], "before rotate")
+
+    def test_backup_writes_files(self):
+        self.cl.add_entry("x")
+        pair = self.cl.backup()
+        self.assertEqual(len(pair), 3)  # .enc .meta .key
+        for p in pair:
+            self.assertTrue(os.path.getsize(p) > 0)

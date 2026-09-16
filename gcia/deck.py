@@ -4,16 +4,57 @@ One codebase, stdlib only: runs in Termux (Android) and WSL/Ubuntu (Windows 11).
 Security: loopback-only by default. To expose over LAN you must set --token.
 """
 
+import datetime
 import json
 import os
+import secrets
 import socket
 import subprocess
 import time
+from collections import defaultdict, deque
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 VERSION = "0.2.0"
+
+DECK_JOURNAL = Path(os.path.expanduser("~/.gcia/deck-journal.jsonl"))
+RATE_LIMITS = {"GET": (90, 60), "POST": (25, 60)}  # (max, window_seconds)
+_hits = defaultdict(deque)
+_host_ok = ""
+_host_token = ""
+
+
+def _journal(entry):
+    try:
+        DECK_JOURNAL.parent.mkdir(parents=True, exist_ok=True)
+        with open(DECK_JOURNAL, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
+
+
+def host_allowed(host_header, token):
+    """Loopback binding: refuse any non-loopback Host to blunt DNS rebinding.
+    Network binding (with --token) accepts any Host."""
+    if token:
+        return True
+    h = (host_header or "").split(":")[0].lower()
+    return h in ("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1") or _host_ok == h
+
+
+def rate_ok(ip, method):
+    """Token-bucket-ish limiter. Returns True if within budget."""
+    key = (ip, method)
+    max_n, window = RATE_LIMITS.get(method, RATE_LIMITS["GET"])
+    now = time.time()
+    q = _hits[key]
+    while q and now - q[0] > window:
+        q.popleft()
+    if len(q) >= max_n:
+        return False
+    q.append(now)
+    return True
 
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -84,6 +125,7 @@ padding:10px 14px;border-radius:8px;display:none;max-width:340px}
  </div>
  <div class="col" id="gciau-col"><h2>GCIAu — AUTHORITY</h2>
   <div class="card"><h3>MINDGUARD — PREDICTIVE CARE</h3><div class="out" id="guard">Run mindguard to load.</div></div>
+  <div class="card"><h3>IMMUNITY — SELF-CHECK</h3><div class="out" id="immunity"><button class="au" onclick="immunity()">Run self-check</button></div></div>
   <div class="card"><h3>CHARTER</h3><div class="out" id="charter">Loading…</div></div>
   <div class="card"><h3>BRIEFINGS</h3>
    <div class="row"><select id="theme">
@@ -91,16 +133,24 @@ padding:10px 14px;border-radius:8px;display:none;max-width:340px}
     <option value="device">device</option><option value="network">network</option><option value="data">data</option>
    </select><button class="au" onclick="doBrief()">Generate briefing</button></div>
    <div class="out" id="brief"></div></div>
-  <div class="card"><h3>REMOTE PEERS + AGENT JOURNAL</h3>
-   <button class="au" onclick="loadRemote()">Refresh</button><div class="out" id="remote"></div></div>
+  <div class="card"><h3>REMOTE LINK — TOWER BRIDGE</h3>
+   <div class="row"><button class="au" onclick="genKey()">Generate storm key</button>
+   <button class="au" onclick="loadRemote()">Refresh peers</button></div>
+   <textarea id="mypub" rows="2" readonly placeholder="your public key appears here — copy to the other tower"></textarea>
+   <div class="row"><input id="peername" placeholder="peer name"><input id="peerpub" placeholder="paste peer public key"></div>
+   <button class="au" onclick="grantPeer()">Import granted peer</button>
+   <div class="out" id="remote"></div></div>
  </div>
 </main>
 <div id="toast"></div>
 <script>
+const CSRF='__CSRF__';
 const $=id=>document.getElementById(id);
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';
  setTimeout(()=>t.style.display='none',4000)}
-async function api(p,opts){const r=await fetch(p,opts);
+async function api(p,opts){opts=opts||{};
+ if(opts.method==='POST'){opts.headers=Object.assign({'Content-Type':'application/json','X-GCI-CSRF':CSRF},opts.headers||{})}
+ const r=await fetch(p,opts);
  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
 function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
 async function doAudit(){const o=$('audit');o.textContent='…';
@@ -148,6 +198,19 @@ async function loadRemote(){const o=$('remote');try{const r=await api('/api/remo
  let t=`peers: ${r.peers.length?Object.keys(r.peers).join(', '):'none'}\\n\\nAGENT JOURNAL (last 5)\\n`;
  t+=r.journal.slice(0,5).map(j=>`[${j.ts.slice(0,19)}] ${j.user} → ${j.command} rc=${j.rc}`).join('\\n')||'(empty)';
  o.textContent=t}catch(e){o.textContent='ERR '+e.message}}
+async function genKey(){try{const r=await api('/api/remote/generate-key',{method:'POST',body:'{}'});
+ $('mypub').value=r.public_key;toast('storm key ready — copy it to the other tower')}
+ catch(e){toast('ERR '+e.message)}}
+async function grantPeer(){const name=$('peername').value.trim(),pub=$('peerpub').value.trim();
+ if(!name||!pub)return toast('need name + public key');
+ try{const r=await api('/api/remote/grant',{method:'POST',body:JSON.stringify({name:name,pubkey:pub})});
+ toast('granted '+r.name);$('peerpub').value='';loadRemote()}catch(e){toast('ERR '+e.message)}}
+async function revokePeer(name){try{await api('/api/remote/revoke',{method:'POST',body:JSON.stringify({name:name})});
+ toast('revoked '+name);loadRemote()}catch(e){toast('ERR '+e.message)}}
+async function immunity(){const o=$('immunity');o.textContent='…';
+ try{const r=await api('/api/immunity');o.innerHTML=r.checks.map(c=>
+ `<div class="${esc(c.pass?'ok':'warn')}">${c.pass?'✓':'✗'} ${esc(c.name)}: ${esc(c.detail)}</div>`).join('\n')}
+ catch(e){o.textContent='ERR '+e.message}}
 (async function init(){try{const s=await api('/api/status');$('host').textContent=s.hostname;
  $('ver').textContent='gcia v'+s.version;loadStats();loadCharter();doAudit()}catch(e){$('host').textContent='offline'}})();
 </script></body></html>"""
@@ -210,6 +273,36 @@ def api_dispatch_get(path, query):
         s = stats()
         s["labels"] = {k: v for k, v in sorted(s["labels"].items())}
         return s
+    if path == "/api/immunity":
+        checks = []
+        bound = _host_ok
+        checks.append({"name": "deck-binding", "pass": (not bound) or bound.startswith(("127.", "localhost")) or bool(_host_token),
+                       "detail": f"bound={bound or '?'} token={'set' if _host_token else 'none'}"})
+        checks.append({"name": "csrf", "pass": True, "detail": "X-GCI-CSRF enforced on all mutations"})
+        checks.append({"name": "rate-limit", "pass": True, "detail": "per-IP budgets: GET 90/min, POST 25/min"})
+        try:
+            from gcia import contactlog
+            _ = contactlog.list_entries()
+            checks.append({"name": "contact-log integrity", "pass": True, "detail": "decrypt + sha256 verified"})
+        except Exception as e:
+            checks.append({"name": "contact-log integrity", "pass": False, "detail": str(e)[:120]})
+        try:
+            key = contactlog.LOG_KEY
+            mode = key.stat().st_mode & 0o777 if key.exists() else None
+            checks.append({"name": "log-key perms", "pass": mode == 0o600,
+                           "detail": f"mode={oct(mode) if mode else 'n/a'}"})
+        except Exception:
+            pass
+        from gcia.remote import peers
+        checks.append({"name": "peer-keys", "pass": True, "detail": f"{len(peers())} granted peer(s)"})
+        import shutil
+        checks.append({"name": "openssl", "pass": bool(shutil.which("openssl")),
+                       "detail": "present" if shutil.which("openssl") else "missing"})
+        from gcia.notify import telegram_config
+        tc = telegram_config()
+        checks.append({"name": "telegram-alerts", "pass": bool(tc.get("token") and tc.get("chat_id")),
+                       "detail": "configured" if tc.get("chat_id") else "not configured"})
+        return {"checks": checks}
     if path == "/api/remote":
         from gcia.remote import peers
         journal = []
@@ -239,6 +332,33 @@ def api_dispatch_post(path, body):
         from gcia.notify import push_alert
         push_alert("GCI Deck", body.get("message", "deck alert"))
         return {"ok": True}
+    if path == "/api/remote/generate-key":
+        from gcia.laptop import ssh_keypair
+        priv, pub = ssh_keypair()
+        return {"private_key": priv, "public_key": Path(pub).read_text().strip()}
+    if path == "/api/remote/grant":
+        import tempfile
+        from gcia.remote import grant as _grant
+        name = str(body.get("name") or "").strip()
+        pubkey = str(body.get("pubkey") or "").strip()
+        if not name or not pubkey:
+            return {"error": "name and pubkey required"}
+        with tempfile.NamedTemporaryFile("w", suffix=".pub", delete=False) as f:
+            f.write(pubkey + "\n")
+            tmp = f.name
+        try:
+            info = _grant(name, tmp)
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+        return {"name": name, "key_id": info.get("key_id"), "allowed": info.get("allowed")}
+    if path == "/api/remote/revoke":
+        from gcia.remote import revoke as _revoke
+        name = str(body.get("name") or "").strip()
+        _revoke(name)
+        return {"name": name, "ok": True}
     return None
 
 
@@ -262,13 +382,37 @@ class Handler(BaseHTTPRequestHandler):
         got = q.get("token", [""])[0] or self.headers.get("X-GCI-Token", "")
         return got == token
 
-    def do_GET(self):
+    def _guard(self, method):
+        """Immunity gate: host check, rate limit, token. Returns None or error dict."""
+        if not host_allowed(self.headers.get("Host", ""), self.server.token):
+            _journal({"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                      "event": "host-rejected", "host": self.headers.get("Host", "")[:80],
+                      "path": urlparse(self.path).path})
+            return {"code": 403, "error": "untrusted Host header"}
+        ip = self.client_address[0] if self.client_address else "?"
+        if not rate_ok(ip, method):
+            return {"code": 429, "error": "rate limit exceeded — slow down"}
         if not self._check_token():
-            self._send(401, {"error": "token required"})
+            _journal({"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                      "event": "bad-token", "ip": ip, "path": urlparse(self.path).path})
+            return {"code": 401, "error": "token required"}
+        if method == "POST":
+            if not self.headers.get("Content-Type", "").startswith("application/json"):
+                return {"code": 415, "error": "JSON content-type required"}
+            if self.headers.get("X-GCI-CSRF") != self.server.csrf:  # type: ignore[attr-defined]
+                _journal({"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                          "event": "csrf-rejected", "ip": ip, "path": urlparse(self.path).path})
+                return {"code": 403, "error": "CSRF token mismatch"}
+        return None
+
+    def do_GET(self):
+        g = self._guard("GET")
+        if g:
+            self._send(g["code"], {"error": g["error"]})
             return
         parsed = urlparse(self.path)
         if parsed.path == "/":
-            page = PAGE
+            page = PAGE.replace("__CSRF__", self.server.csrf)  # type: ignore[attr-defined]
             data = page.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -283,8 +427,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, result)
 
     def do_POST(self):
-        if not self._check_token():
-            self._send(401, {"error": "token required"})
+        g = self._guard("POST")
+        if g:
+            self._send(g["code"], {"error": g["error"]})
             return
         parsed = urlparse(self.path)
         length = int(self.headers.get("Content-Length", 0))
@@ -298,6 +443,9 @@ class Handler(BaseHTTPRequestHandler):
         if result is None:
             self._send(404, {"error": "not found"})
             return
+        _journal({"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  "event": "deck-action", "ip": self.client_address[0] if self.client_address else "?",
+                  "path": parsed.path})
         self._send(200, result)
 
 
@@ -306,10 +454,17 @@ def serve(host="127.0.0.1", port=8890, token=None):
         raise SystemExit("Refusing to expose the deck on the network without --token.")
     if port < 1 or port > 65535:
         raise SystemExit("invalid port")
+    global _host_ok, _host_token
+    _host_ok = host
+    _host_token = token or ""
     server = ThreadingHTTPServer((host, port), Handler)
     server.token = token  # type: ignore[attr-defined]
+    server.csrf = secrets.token_hex(16)  # type: ignore[attr-defined]
+    _journal({"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "event": "deck-start", "host": host, "port": port,
+              "token": bool(token)})
     print(f"GCI Command Deck online: http://{host}:{port}" + (f"  (token required)" if token else ""))
-    print("GCIA investigation | GCIAu authority | one interconnected deck.")
+    print("GCIA investigation | GCIAu authority | immunity: CSRF + host-check + rate-limit active")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -183,6 +183,35 @@ def stats():
     }
 
 
+def backup(dst_dir=None):
+    """Copy current encrypted journal + key to a timestamped backup."""
+    import shutil
+    if not LOG_ENC.exists():
+        return None
+    bdir = Path(dst_dir or (LOGDIR / "backups"))
+    bdir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S")
+    pair = []
+    for src, ext in ((LOG_ENC, ".enc"), (LOG_META, ".meta"), (LOG_KEY, ".key")):
+        if src.exists():
+            dst = bdir / f"contact-log-{ts}{ext}"
+            shutil.copy2(src, dst)
+            dst.chmod(0o600)
+            pair.append(str(dst))
+    return pair
+
+
+def rotate_key():
+    """Re-encrypt the journal under a fresh key; old material is backed up."""
+    entries = _read_entries()
+    kept = backup()
+    for f in (LOG_KEY, LOG_ENC, LOG_META):
+        if f.exists():
+            f.unlink()
+    _write_entries(entries)
+    return {"entries": len(entries), "backup": kept}
+
+
 def export_plain(dst):
     """Export decrypted journal to a plaintext file (explicit, owner-intended)."""
     entries = list_entries()
