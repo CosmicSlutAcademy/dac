@@ -164,6 +164,37 @@ def cmd_deck(args):
     return 0
 
 
+def cmd_bvh(args):
+    from gcia import bvh
+    if args.action == "rules":
+        for r in bvh.RULES:
+            print(f"{r['id']:8s} {r['verdict']:6s} {r['registry']:12s} {r['why']}")
+        return 0
+    if args.action == "preview":
+        cmd = " ".join(args.command)
+        v = bvh.preview(cmd)
+        print(f"[{v['verdict'].upper()}] {v['id']} {v['registry']} — {v['why']}")
+        return 0 if v["verdict"] == "allow" else 2
+    if args.action == "run":
+        cmd = " ".join(args.command)
+        r = bvh.run(cmd, approve=args.approve, force=args.force)
+        print(f"[{r.get('verdict','?').upper()}] {r.get('rule','')} {r.get('registry','')} rc={r.get('rc')}")
+        print(r.get("output", r.get("why", "")))
+        return 0 if r.get("ok") else 1
+    if args.action == "journal":
+        for e in bvh.journal(limit=args.limit):
+            print(f"{e.get('ts','')[:19]}  {e.get('verdict',''):16s} {e.get('cmd','')[:60]}  rc={e.get('rc')}")
+        return 0
+    if args.action == "anomaly":
+        a = bvh.scan_anomalies()
+        print(f"# BVH Anomaly Scan — status: {a['status']} ({a['scanned']} actions)")
+        for f in a["findings"]:
+            print(f"[{f['level'].upper()}] {f['registry']} {f['signal']}: {f['detail']}")
+            print(f"    -> {f['action']}")
+        return 0
+    return 1
+
+
 def cmd_registry(args):
     from gcia import registry
     if args.action == "list":
@@ -356,6 +387,24 @@ def build_parser():
     gu = sub.add_parser("guard", help="mindguard predictive care scan (GCIAu)")
     gu.add_argument("--limit", type=int, default=30)
     gu.set_defaults(func=cmd_guard)
+
+    bh = sub.add_parser("bvh", help="behavior verification harness — make ML behave")
+    bha = bh.add_subparsers(dest="action", required=True)
+    bh_rules = bha.add_parser("rules", help="list verification rules")
+    bh_rules.set_defaults(func=cmd_bvh)
+    bh_prev = bha.add_parser("preview", help="sandboxed preview: evaluate without executing")
+    bh_prev.add_argument("command", nargs="+")
+    bh_prev.set_defaults(func=cmd_bvh)
+    bh_run = bha.add_parser("run", help="check, execute (with approval), verify, journal")
+    bh_run.add_argument("command", nargs="+")
+    bh_run.add_argument("--approve", action="store_true", help="approve a mutating action (Human Authorization)")
+    bh_run.add_argument("--force", action="store_true", help="override a deny (operator override)")
+    bh_run.set_defaults(func=cmd_bvh)
+    bh_j = bha.add_parser("journal", help="show recent verified actions")
+    bh_j.add_argument("--limit", type=int, default=20)
+    bh_j.set_defaults(func=cmd_bvh)
+    bh_an = bha.add_parser("anomaly", help="predictive anomaly scan over the journals")
+    bh_an.set_defaults(func=cmd_bvh)
 
     rg = sub.add_parser("registry", help="§MDH-ATA digital governance registry")
     rga = rg.add_subparsers(dest="action", required=True)

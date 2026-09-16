@@ -126,6 +126,12 @@ padding:10px 14px;border-radius:8px;display:none;max-width:340px}
  <div class="col" id="gciau-col"><h2>GCIAu — AUTHORITY</h2>
   <div class="card"><h3>MINDGUARD — PREDICTIVE CARE</h3><div class="out" id="guard">Run mindguard to load.</div></div>
   <div class="card"><h3>IMMUNITY — SELF-CHECK</h3><div class="out" id="immunity"><button class="au" onclick="immunity()">Run self-check</button></div></div>
+  <div class="card"><h3>BVH — BEHAVIOR VERIFICATION</h3>
+   <div class="row"><button class="au" onclick="bvhAnomaly()">Anomaly scan</button>
+   <button class="au" onclick="bvhJournal()">Recent actions</button></div>
+   <div class="row"><input id="bvhcmd" placeholder="command to preview (e.g. rm -rf /)">
+   <button class="au" onclick="bvhPreview()">Preview</button></div>
+   <div class="out" id="bvhout"></div></div>
   <div class="card"><h3>CHARTER</h3><div class="out" id="charter">Loading…</div></div>
   <div class="card"><h3>BRIEFINGS</h3>
    <div class="row"><select id="theme">
@@ -207,6 +213,17 @@ async function grantPeer(){const name=$('peername').value.trim(),pub=$('peerpub'
  toast('granted '+r.name);$('peerpub').value='';loadRemote()}catch(e){toast('ERR '+e.message)}}
 async function revokePeer(name){try{await api('/api/remote/revoke',{method:'POST',body:JSON.stringify({name:name})});
  toast('revoked '+name);loadRemote()}catch(e){toast('ERR '+e.message)}}
+async function bvhAnomaly(){const o=$('bvhout');o.textContent='…';
+ try{const r=await api('/api/bvh/anomaly');o.innerHTML=`status: <b>${esc(r.status)}</b> (${r.scanned} actions)\n`+
+ r.findings.map(f=>`[${esc(f.level.toUpperCase())}] ${esc(f.registry)} ${esc(f.signal)}: ${esc(f.detail)}\n→ ${esc(f.action)}`).join('\n')||'(clear)'}
+ catch(e){o.textContent='ERR '+e.message}}
+async function bvhJournal(){const o=$('bvhout');o.textContent='…';
+ try{const r=await api('/api/bvh/journal?limit=8');o.textContent=r.entries.map(e=>
+ `[${e.ts.slice(0,19)}] ${e.verdict} ${e.cmd} rc=${e.rc}`).join('\n')||'(empty)'}
+ catch(e){o.textContent='ERR '+e.message}}
+async function bvhPreview(){const o=$('bvhout');const cmd=$('bvhcmd').value.trim();if(!cmd)return;
+ try{const r=await api('/api/bvh/preview?command='+encodeURIComponent(cmd));
+ o.textContent=`[${r.verdict.toUpperCase()}] ${r.id} ${r.registry}\n${r.why}`}catch(e){o.textContent='ERR '+e.message}}
 async function immunity(){const o=$('immunity');o.textContent='…';
  try{const r=await api('/api/immunity');o.innerHTML=r.checks.map(c=>
  `<div class="${esc(c.pass?'ok':'warn')}">${c.pass?'✓':'✗'} ${esc(c.name)}: ${esc(c.detail)}</div>`).join('\n')}
@@ -280,6 +297,17 @@ def api_dispatch_get(path, query):
             return {"items": registry.search(q)}
         return {"items": registry.list_registry(), "count": registry.count(),
                 "infinity": registry.INFINITY}
+    if path == "/api/bvh/anomaly":
+        from gcia.bvh import scan_anomalies
+        return scan_anomalies()
+    if path == "/api/bvh/journal":
+        from gcia.bvh import journal
+        limit = int(query.get("limit", ["10"])[0])
+        return {"entries": journal(limit=limit)}
+    if path == "/api/bvh/preview":
+        from gcia.bvh import preview as _preview
+        cmd = (query.get("command") or [""])[0]
+        return _preview(cmd)
     if path == "/api/immunity":
         checks = []
         bound = _host_ok

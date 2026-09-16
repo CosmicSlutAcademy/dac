@@ -419,3 +419,56 @@ class RegistryTest(unittest.TestCase):
         r = api_dispatch_get("/api/registry", {"q": ["governance"]})
         ids = [i["id"] for i in r["items"]]
         self.assertIn("§MDH-ATA-53", ids)
+
+
+class BvhTest(unittest.TestCase):
+    def setUp(self):
+        from gcia import bvh
+        self.bvh = bvh
+        self._tmp = tempfile.TemporaryDirectory()
+        import pathlib
+        self._old = (bvh.BVH_DIR, bvh.BVH_JOURNAL)
+        bvh.BVH_DIR = pathlib.Path(self._tmp.name)
+        bvh.BVH_JOURNAL = pathlib.Path(self._tmp.name) / "bvh-journal.jsonl"
+
+    def tearDown(self):
+        from gcia import bvh
+        bvh.BVH_DIR, bvh.BVH_JOURNAL = self._old
+        self._tmp.cleanup()
+
+    def test_evaluate_verdicts(self):
+        self.assertEqual(self.bvh.evaluate("rm -rf /")["verdict"], "deny")
+        self.assertEqual(self.bvh.evaluate("cat ~/.ssh/id_ed25519")["verdict"], "deny")
+        self.assertEqual(self.bvh.evaluate("git push origin main")["verdict"], "warn")
+        self.assertEqual(self.bvh.evaluate("gcia audit")["verdict"], "allow")
+
+    def test_deny_never_executes(self):
+        r = self.bvh.run("rm -rf /")
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["verdict"], "deny")
+        rows = self.bvh.journal()
+        self.assertEqual(rows[-1]["event"], "denied")
+
+    def test_warn_requires_approval(self):
+        target = os.path.join(self._tmp.name, "bvh-probe.txt")
+        r = self.bvh.run(f"touch {target}")
+        self.assertEqual(r["verdict"], "require-approval")
+        self.assertFalse(os.path.exists(target))
+
+    def test_allow_executes_and_journals(self):
+        r = self.bvh.run("echo bvh-ok")
+        self.assertTrue(r["ok"])
+        self.assertEqual(self.bvh.journal()[-1]["rc"], 0)
+
+    def test_anomaly_detects_denials(self):
+        self.bvh.run("rm -rf /")
+        a = self.bvh.scan_anomalies()
+        self.assertEqual(a["status"], "alert")
+        self.assertTrue(any(f["signal"] == "containment-breach-attempt" for f in a["findings"]))
+
+    def test_deck_preview_endpoint(self):
+        from gcia.deck import api_dispatch_get
+        r = api_dispatch_get("/api/bvh/preview", {"command": ["rm -rf /"]})
+        self.assertEqual(r["verdict"], "deny")
+        a = api_dispatch_get("/api/bvh/anomaly", {})
+        self.assertIn("status", a)

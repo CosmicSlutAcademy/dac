@@ -33,6 +33,13 @@ def one_patrol(notify_even_clean=True, sound=False):
             flags.append(f"mindguard:{mind['status']} ({len(mind['findings'])} finding(s))")
     except Exception:
         pass
+    from gcia.bvh import scan_anomalies
+    try:
+        beh = scan_anomalies()
+        if beh["status"] != "clear":
+            flags.append(f"bvh:{beh['status']} ({len(beh['findings'])} finding(s))")
+    except Exception:
+        pass
     if flags:
         title = f"GCIA PATROL: {len(flags)} finding(s) on {host}"
         content = " | ".join(flags) + f" | battery {bat}"
