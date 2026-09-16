@@ -511,3 +511,25 @@ class ReportTest(unittest.TestCase):
             self.assertIn("Acme", html)
             self.assertIn("no guarantee", html)
             self.assertIn("No psychic, paranormal", html)
+
+    def test_generate_report_pro_bono(self):
+        from unittest import mock
+        import gcia.report as report
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "pb.html")
+            with mock.patch.object(report, "_exec_summary", return_value="summary"):
+                r = report.generate_report("Humanity Org", out=__import__("pathlib").Path(out), pro_bono=True)
+            self.assertEqual(r["fee"], 0)
+            self.assertTrue(r["pro_bono"])
+            with open(out) as f:
+                html = f.read()
+            self.assertIn("PRO BONO — CIVILIZATION SAFEGUARD", html)
+            self.assertIn("$0", html)
+
+
+class CharterSafeguardTest(unittest.TestCase):
+    def test_charter_has_safeguard(self):
+        from pathlib import Path
+        c = Path("docs/gciau-charter.md").read_text()
+        self.assertIn("## 7. Civilization Safeguard", c)
+        self.assertIn("free", c.split("## 7.")[1].lower())

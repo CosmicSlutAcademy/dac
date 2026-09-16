@@ -42,6 +42,15 @@ recurring subscription.
 - **Taxes** — crypto income is taxable income in most jurisdictions; track
   each invoice (the report line items + journal make bookkeeping easy).
 
+## Civilization Safeguard — free when it matters
+
+Commercial tiers fund the work; the safeguard makes it free when protection of
+civilization is at stake (GCIAu Charter §7): humanitarian/disaster response,
+critical infrastructure defense, vulnerable populations, free press, non-profit
+research, and individuals in crisis. Use `gcia report --pro-bono` for zero-fee
+reports stamped PRO BONO — CIVILIZATION SAFEGUARD. No lock-in: data stays
+on-device, encrypted and exportable.
+
 ## Suggested next builds (pick one)
 
 - `gcia sentinel` — URL watchlist + change alerts (recurring monthly).

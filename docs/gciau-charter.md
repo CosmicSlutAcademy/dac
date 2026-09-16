@@ -38,6 +38,20 @@ The mind is treated as a real, private subjective dimension: invisible to curren
 2. When signals warrant, the operator — and only the operator — decides. The system's job is to surface the signal and suggest professional support alongside any investigation.
 3. Digital hygiene is defense: updates applied, ports watched, briefings read, deepfakes and manipulative content flagged as adversarial influence against cognitive sovereignty.
 
+## 7. Civilization Safeguard (free access clause)
+
+When protection of civilization from collapse is at stake, this framework is free.
+
+- **Trigger conditions (honor-system, operator-attested):** verified humanitarian
+  and disaster response, protection of critical infrastructure, defense of
+  vulnerable populations or free press, academic and non-profit security
+  research, individuals in crisis, and clear civilizational emergencies.
+- **Commitments:** the stack remains open-source; fees are waived (pro-bono mode)
+  for triggered use cases; no lock-in — data stays on the operator's device and
+  is exportable at any time.
+- **Boundary:** commercial work for private profit or state surveillance of
+  peaceful populations never qualifies for the waiver.
+
 ## 6. Enforcement
 
 - `gcia audit` — posture check (ports, perms, updates).

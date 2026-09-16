@@ -220,7 +220,8 @@ def cmd_registry(args):
 
 def cmd_report(args):
     from gcia.report import generate_report
-    r = generate_report(args.client, contact=args.contact, fee=args.fee, out=args.output)
+    r = generate_report(args.client, contact=args.contact, fee=args.fee, out=args.output,
+                        pro_bono=args.pro_bono)
     print(f"Report written: {r['path']}")
     print(f"Client: {r['client']} | suggested fee: ${r['fee']}")
     print(f"BVH status: {r['bvh_status']} | Mindguard: {r['guard_status']}")
@@ -433,6 +434,8 @@ def build_parser():
     rp.add_argument("--contact", default="")
     rp.add_argument("--fee", type=int, default=79, help="total line-item fee shown")
     rp.add_argument("--output", default=None, help="output html path")
+    rp.add_argument("--pro-bono", action="store_true",
+                    help="civilization-safeguard free mode (GCIAu Charter §7), fee $0")
     rp.set_defaults(func=cmd_report)
 
     fl = sub.add_parser("fleet", help="principal coder + specialist captain/pilot bots")
