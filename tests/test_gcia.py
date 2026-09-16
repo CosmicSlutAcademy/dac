@@ -494,3 +494,20 @@ class FleetBvhIntegrationTest(unittest.TestCase):
         self.assertTrue(r["ok"])
         self.assertEqual(r.get("verdict"), "allow")
         self.assertIn("hostname", r["output"])
+
+
+class ReportTest(unittest.TestCase):
+    def test_generate_report(self):
+        from unittest import mock
+        import gcia.report as report
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "r.html")
+            with mock.patch.object(report, "_exec_summary", return_value="summary line"):
+                r = report.generate_report("Acme", contact="ops@acme.io", out=__import__("pathlib").Path(out), fee=149)
+            self.assertTrue(r["path"].endswith("r.html"))
+            self.assertEqual(r["fee"], 149)
+            with open(out) as f:
+                html = f.read()
+            self.assertIn("Acme", html)
+            self.assertIn("no guarantee", html)
+            self.assertIn("No psychic, paranormal", html)
