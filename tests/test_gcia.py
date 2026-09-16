@@ -349,3 +349,53 @@ class ContactLogRotationTest(unittest.TestCase):
         self.assertEqual(len(pair), 3)  # .enc .meta .key
         for p in pair:
             self.assertTrue(os.path.getsize(p) > 0)
+
+
+class FleetTest(unittest.TestCase):
+    def test_roster_shape(self):
+        from gcia.fleet import roster
+        rs = roster()
+        self.assertGreaterEqual(len(rs), 12)
+        self.assertTrue(any(r["name"] == "captain-core" for r in rs))
+        self.assertTrue(any(r["name"] == "pilot-audit" for r in rs))
+
+    def test_run_audit(self):
+        from gcia.fleet import run_role
+        r = run_role("pilot-audit")
+        self.assertTrue(r["ok"])
+        self.assertIn("hostname", r["output"])
+
+    def test_unknown_role(self):
+        from gcia.fleet import run_role
+        r = run_role("pilot-nope")
+        self.assertFalse(r["ok"])
+        self.assertIn("unknown role", r["error"])
+
+    def test_missing_args(self):
+        from gcia.fleet import run_role
+        r = run_role("pilot-scan", args={"host": "127.0.0.1"})  # ports missing
+        self.assertFalse(r["ok"])
+        self.assertIn("missing required", r["error"])
+
+    def test_captain_has_no_tool(self):
+        from gcia.fleet import run_role
+        r = run_role("captain-core")
+        self.assertTrue(r["ok"])
+        self.assertIn("captain", r["output"])
+
+    def test_fallback_dispatch(self):
+        from gcia.fleet import _dispatch_fallback
+        plan = _dispatch_fallback("protect the network with patrol and code the fix")
+        roles = plan["roles"]
+        self.assertIn("pilot-audit", roles)
+        self.assertIn("pilot-patrol", roles)
+        self.assertIn("pilot-code", roles)
+
+    def test_fleet_brief_fallback_path(self):
+        from unittest import mock
+        import gcia.fleet as fleet
+        with mock.patch.object(fleet, "_llm_assign", return_value=None), \
+             mock.patch.object(fleet, "_synthesize", return_value="fallback report"):
+            b = fleet.fleet_brief("quick audit")
+            self.assertTrue(b["mission"].endswith(".md"))
+            self.assertTrue(b["report"].startswith("fallback"))

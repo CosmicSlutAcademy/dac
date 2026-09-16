@@ -164,6 +164,36 @@ def cmd_deck(args):
     return 0
 
 
+def cmd_fleet(args):
+    from gcia import fleet
+    if args.action == "roster":
+        for r in fleet.roster():
+            print(f"{r['rank'].upper():8s} {r['name']:16s} {r['mission']}")
+        return 0
+    if args.action == "run":
+        r = fleet.run_role(args.role, args=args.args or None)
+        if not r["ok"]:
+            print(f"[{r['role']}] FAILED: {r.get('error', '')}")
+            return 1
+        print(r.get("output", "") or f"{r['role']} ok")
+        return 0
+    if args.action == "brief":
+        b = fleet.fleet_brief(args.task)
+        print(f"# Mission: {args.task}")
+        print(f"plan: {', '.join(b['plan'].get('roles', []))} — {b['plan'].get('note','')}")
+        for r in b["results"]:
+            print(f"[{r['role']}] {'ok' if r['ok'] else 'FAILED'}")
+        print("\n" + b["report"])
+        print(f"\nmission saved: {b['mission']}")
+        return 0
+    if args.action == "status":
+        s = fleet.fleet_status()
+        for k, v in s.items():
+            print(f"{k}: {'ONLINE' if v else 'offline'}")
+        return 0
+    return 1
+
+
 def cmd_alert(args):
     from gcia.notify import push_alert
     push_alert(args.title, args.message, sound=args.sound)
@@ -303,6 +333,20 @@ def build_parser():
     gu = sub.add_parser("guard", help="mindguard predictive care scan (GCIAu)")
     gu.add_argument("--limit", type=int, default=30)
     gu.set_defaults(func=cmd_guard)
+
+    fl = sub.add_parser("fleet", help="principal coder + specialist captain/pilot bots")
+    fla = fl.add_subparsers(dest="action", required=True)
+    fl_ro = fla.add_parser("roster", help="list all specialists")
+    fl_ro.set_defaults(func=cmd_fleet)
+    fl_run = fla.add_parser("run", help="execute one specialist")
+    fl_run.add_argument("role")
+    fl_run.add_argument("args", nargs="*", default=None)
+    fl_run.set_defaults(func=cmd_fleet)
+    fl_br = fla.add_parser("brief", help="run a mission: principal assigns, pilots execute")
+    fl_br.add_argument("task")
+    fl_br.set_defaults(func=cmd_fleet)
+    fl_st = fla.add_parser("status", help="fleet health: deck, llm, telegram, sshd")
+    fl_st.set_defaults(func=cmd_fleet)
 
     dk = sub.add_parser("deck", help="GCI Command Deck web UI (GCIA + GCIAu)")
     dk.add_argument("--host", default="127.0.0.1")
