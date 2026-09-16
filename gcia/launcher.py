@@ -247,7 +247,10 @@ def cmd_legal(args):
 def cmd_report(args):
     from gcia.report import generate_report
     r = generate_report(args.client, contact=args.contact, fee=args.fee, out=args.output,
-                        pro_bono=args.pro_bono)
+                        pro_bono=args.pro_bono, auth=args.auth)
+    if r.get("auth"):
+        print(f"Linked authorization: {r['auth']['path']} (attestation {str(r['auth'].get('attestation'))[:16]}…)")
+    print(f"Report attestation: {str(r.get('attestation'))[:16]}… | file SHA-256: {r['hash'][:16]}…")
     print(f"Report written: {r['path']}")
     print(f"Client: {r['client']} | suggested fee: ${r['fee']}")
     print(f"BVH status: {r['bvh_status']} | Mindguard: {r['guard_status']}")
@@ -483,6 +486,8 @@ def build_parser():
     rp.add_argument("--output", default=None, help="output html path")
     rp.add_argument("--pro-bono", action="store_true",
                     help="civilization-safeguard free mode (GCIAu Charter §7), fee $0")
+    rp.add_argument("--auth", default=None,
+                    help="authorization ref: 'auto' (latest for client), 'latest', hash, or file path")
     rp.set_defaults(func=cmd_report)
 
     fl = sub.add_parser("fleet", help="principal coder + specialist captain/pilot bots")

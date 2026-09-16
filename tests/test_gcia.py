@@ -1,5 +1,6 @@
 """Tests for GCIA investigation/regulatory CLI modules."""
 
+import hashlib
 import os
 import tempfile
 import unittest
@@ -511,6 +512,43 @@ class ReportTest(unittest.TestCase):
             self.assertIn("Acme", html)
             self.assertIn("no guarantee", html)
             self.assertIn("No psychic, paranormal", html)
+
+    def test_generate_report_auth_loop(self):
+        from unittest import mock
+        import gcia.report as report
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "auth.html")
+            auth = {"attestation": "a" * 64, "path": "/x/auth.md", "source": "ledger"}
+            with mock.patch.object(report, "_exec_summary", return_value="summary"), \
+                 mock.patch.object(report, "resolve_auth", return_value=auth):
+                r = report.generate_report("Acme", out=__import__("pathlib").Path(out))
+            self.assertEqual(r["hash"], hashlib.sha256(open(out, "rb").read()).hexdigest())
+            self.assertNotEqual(r["attestation"], r["hash"])  # stamp changes content
+            with open(out) as f:
+                html = f.read()
+            self.assertIn("Authorization &amp; Evidence Link", html)
+            self.assertIn("Report attestation (pre-stamp SHA-256): <code>" + r["attestation"], html)
+
+    def test_resolve_auth_matches_client_only(self):
+        import gcia.report as report
+        from gcia import legal
+        import pathlib
+        with tempfile.TemporaryDirectory() as d:
+            d2 = pathlib.Path(d)
+            old = (legal.LEGAL_DIR, legal.LEDGER, legal.REPORTS_DIR)
+            legal.LEGAL_DIR = d2
+            legal.LEDGER = d2 / "engagements.jsonl"
+            legal.REPORTS_DIR = d2 / "reports"
+            try:
+                legal.authorize("Acme", "scope-a")
+                legal.authorize("Other", "scope-b")
+                r = report.resolve_auth("Acme", None)
+                self.assertEqual(r["source"], "ledger")
+                self.assertIn("acme", r["path"].lower())
+                self.assertIsNone(report.resolve_auth("Nobody", None))
+                self.assertIsNotNone(report.resolve_auth("Other", "latest"))
+            finally:
+                legal.LEGAL_DIR, legal.LEDGER, legal.REPORTS_DIR = old
 
     def test_generate_report_pro_bono(self):
         from unittest import mock
