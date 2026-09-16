@@ -399,3 +399,23 @@ class FleetTest(unittest.TestCase):
             b = fleet.fleet_brief("quick audit")
             self.assertTrue(b["mission"].endswith(".md"))
             self.assertTrue(b["report"].startswith("fallback"))
+
+
+class RegistryTest(unittest.TestCase):
+    def test_count_and_shape(self):
+        from gcia.registry import count, list_registry
+        self.assertEqual(count(), 101)
+        es = list_registry()
+        self.assertEqual(es[0], {"id": "§MDH-ATA-00", "domain": "Multiverse Origin"})
+
+    def test_get_and_search(self):
+        from gcia.registry import get_entry, search, INFINITY
+        self.assertEqual(get_entry("54")["domain"], "GCIA Intelligence")
+        self.assertEqual(INFINITY, "§MDH-ATA-∞")
+        self.assertGreaterEqual(len(search("simulation")), 8)
+
+    def test_deck_registry_endpoint(self):
+        from gcia.deck import api_dispatch_get
+        r = api_dispatch_get("/api/registry", {"q": ["governance"]})
+        ids = [i["id"] for i in r["items"]]
+        self.assertIn("§MDH-ATA-53", ids)

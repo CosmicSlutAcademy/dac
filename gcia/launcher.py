@@ -164,6 +164,29 @@ def cmd_deck(args):
     return 0
 
 
+def cmd_registry(args):
+    from gcia import registry
+    if args.action == "list":
+        for r in registry.list_registry():
+            print(f"{r['id']:20s} {r['domain']}")
+        return 0
+    if args.action == "get":
+        e = registry.get_entry(args.id)
+        if not e:
+            print(f"not found: {args.id}")
+            return 1
+        print(f"{e['id']}: {e['domain']}")
+        return 0
+    if args.action == "search":
+        for r in registry.search(args.text):
+            print(f"{r['id']:20s} {r['domain']}")
+        return 0
+    if args.action == "count":
+        print(f"{registry.count()} registered domains (00-99 + {registry.INFINITY})")
+        return 0
+    return 1
+
+
 def cmd_fleet(args):
     from gcia import fleet
     if args.action == "roster":
@@ -333,6 +356,19 @@ def build_parser():
     gu = sub.add_parser("guard", help="mindguard predictive care scan (GCIAu)")
     gu.add_argument("--limit", type=int, default=30)
     gu.set_defaults(func=cmd_guard)
+
+    rg = sub.add_parser("registry", help="§MDH-ATA digital governance registry")
+    rga = rg.add_subparsers(dest="action", required=True)
+    rg_list = rga.add_parser("list", help="list all domains")
+    rg_list.set_defaults(func=cmd_registry)
+    rg_get = rga.add_parser("get", help="show one entry by ID (e.g. 07 or -\u221e)")
+    rg_get.add_argument("id")
+    rg_get.set_defaults(func=cmd_registry)
+    rg_sea = rga.add_parser("search", help="search domains by keyword")
+    rg_sea.add_argument("text")
+    rg_sea.set_defaults(func=cmd_registry)
+    rg_cnt = rga.add_parser("count", help="number of registered domains")
+    rg_cnt.set_defaults(func=cmd_registry)
 
     fl = sub.add_parser("fleet", help="principal coder + specialist captain/pilot bots")
     fla = fl.add_subparsers(dest="action", required=True)

@@ -273,6 +273,13 @@ def api_dispatch_get(path, query):
         s = stats()
         s["labels"] = {k: v for k, v in sorted(s["labels"].items())}
         return s
+    if path == "/api/registry":
+        from gcia import registry
+        q = (query.get("q") or [""])[0].strip()
+        if q:
+            return {"items": registry.search(q)}
+        return {"items": registry.list_registry(), "count": registry.count(),
+                "infinity": registry.INFINITY}
     if path == "/api/immunity":
         checks = []
         bound = _host_ok
