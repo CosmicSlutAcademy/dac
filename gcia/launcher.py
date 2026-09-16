@@ -218,6 +218,32 @@ def cmd_registry(args):
     return 1
 
 
+def cmd_legal(args):
+    from gcia import legal
+    if args.action == "authorize":
+        r = legal.authorize(args.client, args.scope, operator=args.operator,
+                            date_start=args.start, date_end=args.end)
+        print(f"Authorization written: {r['path']}")
+        print(f"Attestation SHA-256: {r['hash']}")
+        return 0
+    if args.action in ("agree", "nda", "consent"):
+        r = getattr(legal, args.action)(args.client, operator=args.operator)
+        print(f"{args.action}: {r['path']}")
+        print(f"sha256: {r['hash']}")
+        return 0
+    if args.action == "engagements":
+        for e in legal.engagements(limit=20):
+            print(f"{e.get('ts','')[:19]}  {e.get('kind',''):9s} {e.get('client','')}  {e.get('hash','')[:16]}…")
+        return 0
+    if args.action == "manifest":
+        m = legal.manifest()
+        print(f"Evidence manifest: {m['path']}")
+        print(f"Chain head: {m['head']} ({m['count']} records)")
+        return 0
+    print("use: gcia legal authorize|agree|nda|consent|engagements|manifest")
+    return 1
+
+
 def cmd_report(args):
     from gcia.report import generate_report
     r = generate_report(args.client, contact=args.contact, fee=args.fee, out=args.output,
@@ -428,6 +454,27 @@ def build_parser():
     rg_sea.set_defaults(func=cmd_registry)
     rg_cnt = rga.add_parser("count", help="number of registered domains")
     rg_cnt.set_defaults(func=cmd_registry)
+
+    lg = sub.add_parser("legal", help="judicial protection: authorization, agreements, evidence chain")
+    lga = lg.add_subparsers(dest="action", required=True)
+    lg_auth = lga.add_parser("authorize", help="generate signed written-consent authorization")
+    lg_auth.add_argument("client")
+    lg_auth.add_argument("--scope", default="", help="exact assets / IP range authorized")
+    lg_auth.add_argument("--operator", default="GCI Operator")
+    lg_auth.add_argument("--start", default=None)
+    lg_auth.add_argument("--end", default=None)
+    lg_auth.set_defaults(func=cmd_legal)
+    for nm, help_txt in (("agree", "services agreement with liability cap"),
+                         ("nda", "mutual non-disclosure agreement"),
+                         ("consent", "personal-data processing consent")):
+        sp = lga.add_parser(nm, help=help_txt)
+        sp.add_argument("client")
+        sp.add_argument("--operator", default="GCI Operator")
+        sp.set_defaults(func=cmd_legal)
+    lg_eng = lga.add_parser("engagements", help="list engagement ledger")
+    lg_eng.set_defaults(func=cmd_legal)
+    lg_man = lga.add_parser("manifest", help="hash-chain evidence manifest (reports + paperwork)")
+    lg_man.set_defaults(func=cmd_legal)
 
     rp = sub.add_parser("report", help="generate a sellable client security report")
     rp.add_argument("client")

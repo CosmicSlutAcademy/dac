@@ -533,3 +533,48 @@ class CharterSafeguardTest(unittest.TestCase):
         c = Path("docs/gciau-charter.md").read_text()
         self.assertIn("## 7. Civilization Safeguard", c)
         self.assertIn("free", c.split("## 7.")[1].lower())
+
+
+class LegalShieldTest(unittest.TestCase):
+    def setUp(self):
+        from gcia import legal
+        self.legal = legal
+        self._tmp = tempfile.TemporaryDirectory()
+        import pathlib
+        d = pathlib.Path(self._tmp.name)
+        self._old = (legal.LEGAL_DIR, legal.LEDGER, legal.REPORTS_DIR)
+        legal.LEGAL_DIR = d
+        legal.LEDGER = d / "engagements.jsonl"
+        legal.REPORTS_DIR = d / "reports"
+
+    def tearDown(self):
+        from gcia import legal
+        legal.LEGAL_DIR, legal.LEDGER, legal.REPORTS_DIR = self._old
+        self._tmp.cleanup()
+
+    def test_authorize_writes_attestation_and_ledger(self):
+        r = self.legal.authorize("Acme", "10.0.0.0/24")
+        self.assertIn("authorize-", r["path"])
+        self.assertEqual(len(r["hash"]), 64)
+        self.assertIsNotNone(r["attestation"])
+        import pathlib
+        body = pathlib.Path(r["path"]).read_text()
+        self.assertIn("Attestation (SHA-256): " + r["attestation"], body)
+        self.assertIn("not legal advice", body)
+        rows = self.legal.engagements()
+        self.assertEqual(rows[-1]["client"], "Acme")
+        self.assertEqual(rows[-1]["attestation"], r["attestation"])
+
+    def test_consent_mentions_encryption(self):
+        r = self.legal.consent("Jane")
+        import pathlib
+        self.assertIn("AES-256", pathlib.Path(r["path"]).read_text())
+
+    def test_manifest_chains_records(self):
+        self.legal.nda("Acme")
+        (self.legal.REPORTS_DIR).mkdir(parents=True, exist_ok=True)
+        rep = self.legal.REPORTS_DIR / "gci-report-acme.html"
+        rep.write_text("<html>report</html>")
+        m = self.legal.manifest()
+        self.assertEqual(m["count"], 2)
+        self.assertEqual(len(m["head"]), 64)
